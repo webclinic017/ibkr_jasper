@@ -8,7 +8,7 @@ with Timer("Read reports", True):
 with Timer("Parse deposits & withdrawals", True):
     df_io = fetch_io(report_list)
 
-with Timer("Parse dividends", True):
-    df_divs = fetch_divs(report_list)
+with Timer("Parse trades", True):
+    df_trades = fetch_trades(report_list)
 
-print_df(df_divs)
+print_df(df_trades)

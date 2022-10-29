@@ -1,7 +1,7 @@
 import polars as pl
 import csv
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 
 
 def load_raw_reports():
@@ -75,3 +75,54 @@ def fetch_divs(report_list):
     df_divs = df_divs.sort(by=df_divs.columns).unique()
 
     return df_divs
+
+
+def fetch_trades(report_list):
+    trades_report = [x for x in report_list if x[0] == 'Trades']
+    trades_columns = trades_report[0][2:]
+    trades_columns.pop(13)
+    trades_columns.pop(12)
+    trades_columns.pop(11)
+    trades_columns.pop(9)
+    trades_columns.pop(8)
+    trades_data = trades_report[1:]
+    trades_data_filtered = {k: [] for k in trades_columns}
+    for row in iter(trades_data):
+        if row[1] != 'Data' or row[2] not in ['Trade', 'ClosedLot']:
+            continue
+
+        # row[2] - type of order
+        # row[3] - type of asset
+        # row[4] - currency
+        # row[5] - ticker
+        # row[6] - date
+        # row[7] - exchange
+        # row[8] - quantity
+        # row[9] - trade price
+        # row[12] - fees
+        # row[16] - code
+        trades_data_filtered[trades_columns[0]].append(row[2])
+        trades_data_filtered[trades_columns[1]].append(row[3])
+        trades_data_filtered[trades_columns[2]].append(row[4])
+        trades_data_filtered[trades_columns[3]].append(row[5])
+        trades_data_filtered[trades_columns[4]].append(datetime.fromisoformat(row[6].replace(',', '')))
+        trades_data_filtered[trades_columns[5]].append(row[7])
+        trades_data_filtered[trades_columns[6]].append(row[8].replace(',', ''))
+        trades_data_filtered[trades_columns[7]].append(row[9])
+        trades_data_filtered[trades_columns[8]].append(row[12] if row[12] != '' else '0')
+        trades_data_filtered[trades_columns[9]].append(row[16])
+
+    df_trades = pl.DataFrame(trades_data_filtered).with_columns([
+        pl.col('DataDiscriminator').cast(pl.Categorical),
+        pl.col('Asset Category').cast(pl.Categorical),
+        pl.col('Currency').cast(pl.Categorical),
+        pl.col('Symbol').cast(pl.Categorical),
+        pl.col('Exchange').cast(pl.Categorical),
+        pl.col('Quantity').cast(pl.Float64),
+        pl.col('T. Price').cast(pl.Float64),
+        pl.col('Comm/Fee').cast(pl.Float64),
+    ])
+    # TODO split description into separate columns
+    df_trades = df_trades.sort(by=df_trades.columns).unique()
+
+    return df_trades
