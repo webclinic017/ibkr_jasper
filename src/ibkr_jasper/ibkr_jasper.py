@@ -1,4 +1,5 @@
 import polars as pl
+import pandas as pd
 import csv
 from pathlib import Path
 from datetime import date
@@ -43,6 +44,16 @@ def fetch_io(report_list):
     return df_io
 
 
+def print_df(df_pl):
+    with pd.option_context(
+            'display.max_rows', None,
+            'display.max_columns', None,
+            'display.width', 1000,
+    ):
+        df_pd = df_pl.to_pandas()
+        print(df_pd)
+
+
 report_list = load_raw_reports()
 df_io = fetch_io(report_list)
-print(df_io)
+print_df(df_io)
