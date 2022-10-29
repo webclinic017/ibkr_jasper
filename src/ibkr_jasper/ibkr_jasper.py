@@ -10,8 +10,12 @@ def load_raw_reports():
     data_path = Path('../../data')
     all_files = [x for x in data_path.glob('**/*') if x.is_file()]
     report_files = [x for x in all_files if x.suffix == '.csv']
-    report_reader = csv.reader(open(report_files[0]), delimiter=',')
-    report_list = list(report_reader)
+
+    report_list = []
+    for report_file in report_files:
+        report_reader = csv.reader(open(report_file), delimiter=',')
+        report_list += list(report_reader)
+
     return report_list
 
 
