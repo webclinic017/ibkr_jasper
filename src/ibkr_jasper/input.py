@@ -122,7 +122,6 @@ def fetch_trades(report_list):
         pl.col('T. Price').cast(pl.Float64),
         pl.col('Comm/Fee').cast(pl.Float64),
     ])
-    # TODO split description into separate columns
-    df_trades = df_trades.sort(by=df_trades.columns).unique()
+    # df_trades = df_trades.sort(by=df_trades.columns).unique()
 
     return df_trades
