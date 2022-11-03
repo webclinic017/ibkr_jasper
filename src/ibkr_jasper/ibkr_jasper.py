@@ -1,3 +1,4 @@
+from src.ibkr_jasper.data_processing import *
 from src.ibkr_jasper.input import *
 from src.ibkr_jasper.output import *
 from src.ibkr_jasper.timer import Timer
@@ -21,7 +22,8 @@ with Timer('Parse dividends', True):
 
 with Timer('Parse trades', True):
     df_trades = fetch_trades(report_list)
-
+    df_etf_buys = get_etf_buys()
+    df_etf_sells = get_etf_sells()
 
 with Timer('Group trades', True):
     all_tickers = np.transpose(df_trades.select('Symbol').unique().to_numpy()).tolist()[0]
