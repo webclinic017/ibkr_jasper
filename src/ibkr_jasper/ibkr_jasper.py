@@ -1,8 +1,7 @@
 from src.ibkr_jasper.data_processing import get_etf_buys, get_etf_sells, get_all_etfs, get_portfolio_start_date
 from src.ibkr_jasper.input import load_raw_reports, fetch_io, fetch_divs, fetch_trades
+from src.ibkr_jasper.prices_loader import load_etf_prices
 from src.ibkr_jasper.timer import Timer
-import polars as pl
-import yfinance as yf
 from datetime import date, timedelta
 from prettytable import PrettyTable
 import dateutil.rrule as rrule
@@ -20,27 +19,11 @@ with Timer('Parse trades', True):
     df_trades = fetch_trades(report_list)
     df_etf_buys = get_etf_buys()
     df_etf_sells = get_etf_sells()
-
-with Timer('Group trades', True):
     all_etfs = get_all_etfs(df_trades)
     start_date = get_portfolio_start_date(df_trades)
 
 with Timer('Loading of ETF prices', True):
-    prices_dict = {}
-    for ticker in all_etfs:
-        prices = yf.download(ticker,
-                             start=start_date.date(),
-                             end=date.today(),
-                             progress=False)
-        prices_dict[ticker] = pl.DataFrame(prices['Close'].reset_index()).rename({'Close': ticker})
-
-with Timer('Convert prices dict to 1 polars table', True):
-    prices_df = None
-    for ticker, prices in prices_dict.items():
-        if prices_df is None:
-            prices_df = prices
-        else:
-            prices_df = prices_df.join(prices, on='Date', how='outer')
+    prices_df = load_etf_prices(all_etfs, start_date)
 
 with Timer('Output portfolio table', True):
     first_report_date = (start_date.replace(day=1) + timedelta(days=32)).replace(day=1)
