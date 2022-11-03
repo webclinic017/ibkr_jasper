@@ -48,4 +48,13 @@ with Timer('Convert prices dict to 1 polars table', True):
         else:
             prices_df = prices_df.join(prices, on='Date', how='outer')
 
+with Timer('Output portfolio table', True):
+    first_report_date = (start_date.replace(day=1) + timedelta(days=32)).replace(day=1)
+    all_report_dates = list(rrule.rrule(rrule.MONTHLY, dtstart=first_report_date, until=date.today()))
 
+    report_table = PrettyTable()
+    report_table.field_names = all_etfs
+    for date in all_report_dates:
+
+
+        report_table.add_row(["Adelaide", 1295, 1158259, 600.5])
