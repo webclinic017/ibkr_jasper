@@ -5,31 +5,47 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 from yahoofinancials import YahooFinancials
+from datetime import timedelta
+from prettytable import PrettyTable
+import dateutil.rrule as rrule
 
-with Timer("Read reports", True):
+
+with Timer('Read reports', True):
     report_list = load_raw_reports()
 
-with Timer("Parse deposits & withdrawals", True):
+with Timer('Parse deposits & withdrawals', True):
     df_io = fetch_io(report_list)
 
-with Timer("Parse trades", True):
+with Timer('Parse dividends', True):
+    df_divs = fetch_divs(report_list)
+
+with Timer('Parse trades', True):
     df_trades = fetch_trades(report_list)
 
-all_tickers = np.transpose(df_trades.select('Symbol').unique().to_numpy()).tolist()[0]
-start_date = df_trades.select('Date/Time').sort(by=['Date/Time'])[0].to_dicts()[0]['Date/Time']
 
-with Timer("Loading of ETF prices", True):
+with Timer('Group trades', True):
+    all_tickers = np.transpose(df_trades.select('Symbol').unique().to_numpy()).tolist()[0]
+    all_etfs = [x for x in all_tickers if len(x) <= 4]
+    start_date = df_trades.select('Date/Time').sort(by=['Date/Time'])[0].to_dicts()[0]['Date/Time']
+
+with Timer('Loading of ETF prices', True):
     prices_dict = {}
     for ticker in all_tickers:
-        if len(ticker) > 3:
+        if len(ticker) > 4:
             continue
 
         prices = yf.download(ticker,
                              start=start_date.date(),
                              end=date.today(),
                              progress=False)
-        prices_dict[ticker] = pl.DataFrame(prices['Close'].reset_index())
+        prices_dict[ticker] = pl.DataFrame(prices['Close'].reset_index()).rename({'Close': ticker})
+
+with Timer('Convert prices dict to 1 polars table', True):
+    prices_df = None
+    for ticker, prices in prices_dict.items():
+        if prices_df is None:
+            prices_df = prices
+        else:
+            prices_df = prices_df.join(prices, on='Date', how='outer')
 
 
-
-print_df(df_trades)
