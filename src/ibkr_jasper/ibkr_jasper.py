@@ -17,8 +17,8 @@ with Timer('Parse dividends', True):
 
 with Timer('Parse trades', True):
     df_trades = fetch_trades(report_list)
-    df_etf_buys = get_etf_buys()
-    df_etf_sells = get_etf_sells()
+    df_etf_buys = get_etf_buys(df_trades)
+    df_etf_sells = get_etf_sells(df_trades)
     all_etfs = get_all_etfs(df_trades)
     start_date = get_portfolio_start_date(df_trades)
 
