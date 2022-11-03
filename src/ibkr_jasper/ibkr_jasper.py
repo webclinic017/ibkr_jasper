@@ -1,7 +1,6 @@
-from src.ibkr_jasper.data_processing import get_etf_buys, get_etf_sells
+from src.ibkr_jasper.data_processing import get_etf_buys, get_etf_sells, get_all_etfs, get_portfolio_start_date
 from src.ibkr_jasper.input import load_raw_reports, fetch_io, fetch_divs, fetch_trades
 from src.ibkr_jasper.timer import Timer
-import numpy as np
 import polars as pl
 import yfinance as yf
 from datetime import date, timedelta
@@ -23,16 +22,12 @@ with Timer('Parse trades', True):
     df_etf_sells = get_etf_sells()
 
 with Timer('Group trades', True):
-    all_tickers = np.transpose(df_trades.select('Symbol').unique().to_numpy()).tolist()[0]
-    all_etfs = [x for x in all_tickers if len(x) <= 4]
-    start_date = df_trades.select('Date/Time').sort(by=['Date/Time'])[0].to_dicts()[0]['Date/Time']
+    all_etfs = get_all_etfs(df_trades)
+    start_date = get_portfolio_start_date(df_trades)
 
 with Timer('Loading of ETF prices', True):
     prices_dict = {}
-    for ticker in all_tickers:
-        if len(ticker) > 4:
-            continue
-
+    for ticker in all_etfs:
         prices = yf.download(ticker,
                              start=start_date.date(),
                              end=date.today(),
