@@ -41,3 +41,12 @@ def get_port_for_date(portfolio, date, buys, sells):
         port_asof[etf] = long + short
 
     return port_asof
+
+
+def get_portfolio_value(port, prices, date):
+    total_value = 0
+    for etf, pos in port.items():
+        price = prices.filter(pl.col('Date') <= date).select(pl.col(etf)).reverse().limit(1).to_numpy()[0, 0]
+        total_value += pos * price
+
+    return total_value
