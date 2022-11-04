@@ -29,3 +29,15 @@ def get_all_etfs(trades):
 def get_portfolio_start_date(trades):
     start = trades.select('Date/Time').sort(by=['Date/Time'])[0].to_dicts()[0]['Date/Time']
     return start
+
+
+def get_port_for_date(portfolio, date, buys, sells):
+    buys_asof = buys.filter(pl.col('Date/Time') < date)
+    sells_asof = sells.filter(pl.col('Date/Time') < date)
+    port_asof = {n: [0] for n in portfolio}
+    for etf in portfolio:
+        long = buys_asof.filter(pl.col('Symbol') == etf).select('Quantity').sum().fill_null(0).to_numpy()[0, 0]
+        short = sells_asof.filter(pl.col('Symbol') == etf).select('Quantity').sum().fill_null(0).to_numpy()[0, 0]
+        port_asof[etf] = long - short
+
+    return port_asof

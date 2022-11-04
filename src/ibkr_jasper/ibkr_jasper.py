@@ -1,4 +1,5 @@
-from src.ibkr_jasper.data_processing import get_etf_buys, get_etf_sells, get_all_etfs, get_portfolio_start_date
+from src.ibkr_jasper.data_processing import get_etf_buys, get_etf_sells, get_all_etfs, get_portfolio_start_date, \
+    get_port_for_date
 from src.ibkr_jasper.input import load_raw_reports, fetch_io, fetch_divs, fetch_trades
 from src.ibkr_jasper.prices_loader import load_etf_prices
 from src.ibkr_jasper.timer import Timer
@@ -30,6 +31,9 @@ with Timer('Output portfolio table', True):
     all_report_dates = list(rrule.rrule(rrule.MONTHLY, dtstart=first_report_date, until=date.today()))
 
     report_table = PrettyTable()
-    report_table.field_names = all_etfs
+    report_table.field_names = [''] + all_etfs
     for date in all_report_dates:
-        report_table.add_row(["Adelaide", 1295, 1158259, 600.5])
+        port = get_port_for_date(all_etfs, date, df_etf_buys, df_etf_sells)
+        report_table.add_row([date.date()] + [port[x] for x in all_etfs])
+
+    print(report_table)
