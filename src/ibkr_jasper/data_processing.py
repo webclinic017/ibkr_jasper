@@ -15,7 +15,7 @@ def get_etf_sells(trades):
     etf_sells = (trades
                  .filter((pl.col('DataDiscriminator') == 'Trade') &
                          (pl.col('Asset Category') == 'Stocks') &
-                         (pl.col('Quantity') > 0))
+                         (pl.col('Quantity') < 0))
                  .drop(['DataDiscriminator', 'Asset Category']))
     return etf_sells
 
