@@ -38,6 +38,6 @@ def get_port_for_date(portfolio, date, buys, sells):
     for etf in portfolio:
         long = buys_asof.filter(pl.col('Symbol') == etf).select('Quantity').sum().fill_null(0).to_numpy()[0, 0]
         short = sells_asof.filter(pl.col('Symbol') == etf).select('Quantity').sum().fill_null(0).to_numpy()[0, 0]
-        port_asof[etf] = long - short
+        port_asof[etf] = long + short
 
     return port_asof
