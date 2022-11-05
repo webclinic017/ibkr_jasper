@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import numpy as np
 import polars as pl
 
@@ -50,3 +52,19 @@ def get_portfolio_value(port, prices, date):
         total_value += pos * price
 
     return total_value
+
+
+def get_prev_month_deals_value(end_date, buys, sells):
+    start_date = (end_date - timedelta(days=1)).replace(day=1)
+    deals_prev_month = (buys
+                        .select(['Date/Time', 'Quantity', 'T. Price', 'Comm/Fee'])
+                        .extend(sells
+                                .select(['Date/Time', 'Quantity', 'T. Price', 'Comm/Fee']))
+                        .filter((start_date <= pl.col('Date/Time')) & (pl.col('Date/Time') < end_date))
+                        .with_column((pl.col('Quantity') * pl.col('T. Price') - pl.col('Comm/Fee')).alias('value'))
+                        .select(pl.col('value'))
+                        .sum()
+                        .fill_null(0)
+                        .to_numpy()[0, 0])
+
+    return deals_prev_month
