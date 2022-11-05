@@ -46,16 +46,25 @@ def get_port_for_date(portfolio, date, buys, sells):
 
 
 def get_portfolio_value(port, prices, date):
+    """Gives portfolio value on previous day close prices"""
     total_value = 0
     for etf, pos in port.items():
-        price = prices.filter(pl.col('Date') <= date).select(pl.col(etf)).reverse().limit(1).to_numpy()[0, 0]
+        if pos == 0:
+            continue
+
+        price = (prices
+                 .filter(pl.col('Date') < date)
+                 .select(pl.col(etf))
+                 .reverse()
+                 .limit(1)
+                 .to_numpy()[0, 0])
         total_value += pos * price
 
     return total_value
 
 
-def get_prev_month_deals_value(end_date, buys, sells):
-    start_date = (end_date - timedelta(days=1)).replace(day=1)
+def get_cur_month_deals_value(start_date, buys, sells):
+    end_date = (start_date + timedelta(days=32)).replace(day=1)
     deals_prev_month = (buys
                         .select(['Date/Time', 'Quantity', 'T. Price', 'Comm/Fee'])
                         .extend(sells

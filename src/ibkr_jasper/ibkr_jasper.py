@@ -1,5 +1,5 @@
 from src.ibkr_jasper.data_processing import get_etf_buys, get_etf_sells, get_all_etfs, get_portfolio_start_date, \
-    get_port_for_date, get_portfolio_value, get_prev_month_deals_value
+    get_port_for_date, get_portfolio_value, get_cur_month_deals_value
 from src.ibkr_jasper.input import load_raw_reports, fetch_io, fetch_divs, fetch_trades
 from src.ibkr_jasper.prices_loader import load_etf_prices
 from src.ibkr_jasper.timer import Timer
@@ -27,7 +27,7 @@ with Timer('Loading of ETF prices', True):
     prices_df = load_etf_prices(all_etfs, start_date)
 
 with Timer('Output total portfolio table', True):
-    first_report_date = (start_date.replace(day=1) + timedelta(days=32)).replace(day=1)
+    first_report_date = (start_date.replace(day=1) - timedelta(days=1)).replace(day=1)
     all_report_dates = list(rrule.rrule(rrule.MONTHLY, dtstart=first_report_date, until=date.today()))
 
     report_table = PrettyTable()
@@ -35,13 +35,15 @@ with Timer('Output total portfolio table', True):
     for date in all_report_dates:
         port = get_port_for_date(all_etfs, date, df_etf_buys, df_etf_sells)
         port_value = get_portfolio_value(port, prices_df, date)
-        prev_month_deals_value = get_prev_month_deals_value(date, df_etf_buys, df_etf_sells)
+        deals_value = get_cur_month_deals_value(date, df_etf_buys, df_etf_sells)
+
         report_table.add_row([date.date()] +
                              [f'{port[x]:.0f}' for x in all_etfs] +
                              [f'{port_value:.2f}'] +
-                             [f'{prev_month_deals_value:.2f}'])
+                             [f'{deals_value:.2f}'])
         if date.month == 12:
             report_table.add_row([''] * len(report_table.field_names))
 
-    report_table.align['value', 'deals'] = 'r'
+    report_table.align['value'] = 'r'
+    report_table.align['deals'] = 'r'
     print(report_table)
