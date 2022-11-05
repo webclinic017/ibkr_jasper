@@ -65,15 +65,27 @@ def get_portfolio_value(port, prices, date):
 
 def get_cur_month_deals_value(start_date, buys, sells):
     end_date = (start_date + timedelta(days=32)).replace(day=1)
-    deals_prev_month = (buys
-                        .select(['Date/Time', 'Quantity', 'T. Price', 'Comm/Fee'])
-                        .extend(sells
-                                .select(['Date/Time', 'Quantity', 'T. Price', 'Comm/Fee']))
-                        .filter((start_date <= pl.col('Date/Time')) & (pl.col('Date/Time') < end_date))
-                        .with_column((pl.col('Quantity') * pl.col('T. Price') - pl.col('Comm/Fee')).alias('value'))
-                        .select(pl.col('value'))
-                        .sum()
-                        .fill_null(0)
-                        .to_numpy()[0, 0])
+    deals_cur_month = (buys
+                       .select(['Date/Time', 'Quantity', 'T. Price', 'Comm/Fee'])
+                       .extend(sells
+                               .select(['Date/Time', 'Quantity', 'T. Price', 'Comm/Fee']))
+                       .filter((start_date <= pl.col('Date/Time')) & (pl.col('Date/Time') < end_date))
+                       .with_column((pl.col('Quantity') * pl.col('T. Price') - pl.col('Comm/Fee')).alias('value'))
+                       .select(pl.col('value'))
+                       .sum()
+                       .fill_null(0)
+                       .to_numpy()[0, 0])
 
-    return deals_prev_month
+    return deals_cur_month
+
+
+def get_cur_month_divs(start_date, divs):
+    end_date = (start_date + timedelta(days=32)).replace(day=1)
+    divs_cur_month = (divs
+                      .filter((start_date <= pl.col('Date')) & (pl.col('Date') < end_date))
+                      .select(pl.col('Amount'))
+                      .sum()
+                      .fill_null(0)
+                      .to_numpy()[0, 0])
+
+    return divs_cur_month
