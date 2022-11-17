@@ -1,5 +1,5 @@
 from src.ibkr_jasper.data_processing import get_etf_buys, get_etf_sells, get_all_etfs, get_portfolio_start_date, \
-    get_port_for_date, get_portfolio_value, get_cur_month_deals_value, get_cur_month_divs
+    get_port_for_date, get_portfolio_value, get_cur_month_deals_value, get_cur_month_divs, get_period_return
 from src.ibkr_jasper.input import load_raw_reports, fetch_io, fetch_divs, fetch_trades
 from src.ibkr_jasper.prices_loader import load_etf_prices
 from src.ibkr_jasper.timer import Timer
@@ -31,22 +31,31 @@ with Timer('Output total portfolio table', True):
     all_report_dates = list(rrule.rrule(rrule.MONTHLY, dtstart=first_report_date, until=start_date.today()))
 
     report_table = PrettyTable()
-    report_table.field_names = [''] + all_etfs + ['start', 'deals', 'divs', 'end']
+    report_table.field_names = [''] + all_etfs + ['start', 'deals', 'divs', 'end', 'return']
     for start_date in all_report_dates:
+        # start portfolio value
         port_start = get_port_for_date(all_etfs, start_date, df_etf_buys, df_etf_sells)
         start_value = get_portfolio_value(port_start, prices_df, start_date)
+
+        # deals and divs
         deals_value = get_cur_month_deals_value(start_date, df_etf_buys, df_etf_sells)
         divs = get_cur_month_divs(start_date, df_divs)
+
+        # end portfolio value
         end_date = (start_date + timedelta(days=32)).replace(day=1)
         port_end = get_port_for_date(all_etfs, end_date, df_etf_buys, df_etf_sells)
         end_value = get_portfolio_value(port_end, prices_df, end_date)
+
+        # return in percents
+        ret = get_period_return(start_date, end_date, all_etfs, df_etf_buys, df_etf_sells, df_divs, prices_df)
 
         report_table.add_row([start_date.date()] +
                              [f'{port_start[x]:.0f}' for x in all_etfs] +
                              [f'{start_value:.2f}'] +
                              [f'{deals_value:.2f}'] +
                              [f'{divs:.2f}'] +
-                             [f'{end_value:.2f}'])
+                             [f'{end_value:.2f}'] +
+                             [f'{ret:.2f}'])
         if start_date.month == 12:
             report_table.add_row([''] * len(report_table.field_names))
 
@@ -54,4 +63,5 @@ with Timer('Output total portfolio table', True):
     report_table.align['deals'] = 'r'
     report_table.align['divs'] = 'r'
     report_table.align['end'] = 'r'
+    report_table.align['return'] = 'r'
     print(report_table)
