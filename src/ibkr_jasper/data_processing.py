@@ -34,6 +34,7 @@ def get_portfolio_start_date(trades):
 
 
 def get_port_for_date(portfolio, date, buys, sells):
+    """Gives portfolio value on previous day close"""
     buys_asof = buys.filter(pl.col('Date/Time') < date)
     sells_asof = sells.filter(pl.col('Date/Time') < date)
     port_asof = {n: [0] for n in portfolio}
@@ -89,3 +90,65 @@ def get_cur_month_divs(start_date, divs):
                       .to_numpy()[0, 0])
 
     return divs_cur_month
+
+
+def get_period_return(start_date, end_date, etfs, buys, sells, divs, prices):
+    trade_dates = (buys
+                   .select('Date/Time')
+                   .extend(sells
+                           .select('Date/Time'))
+                   .with_column(pl.col('Date/Time').cast(pl.Date))
+                   .rename({'Date/Time': 'Date'})
+                   .extend(divs
+                           .select('Date'))
+                   .filter((start_date <= pl.col('Date')) & (pl.col('Date') < end_date))
+                   .unique()
+                   .get_column('Date')
+                   .to_numpy()
+                   .tolist())
+    trade_dates = sorted(trade_dates + [start_date.date(), end_date.date()])
+
+    return_total = 1
+    value_prev = None
+    for date in trade_dates:
+        # TODO put all three in one array
+        buys_today = (buys
+                      .filter(pl.col('Date/Time').cast(pl.Date) == date)
+                      .with_column((pl.col('Quantity') * pl.col('T. Price') - pl.col('Comm/Fee')).alias('sum'))
+                      .select('sum')
+                      .sum()
+                      .fill_null(0)
+                      .to_numpy()[0, 0])
+        sells_today = (sells
+                       .filter(pl.col('Date/Time').cast(pl.Date) == date)
+                       .with_column((pl.col('Quantity') * pl.col('T. Price') - pl.col('Comm/Fee')).alias('sum'))
+                       .select('sum')
+                       .sum()
+                       .fill_null(0)
+                       .to_numpy()[0, 0])
+        divs_today = (divs
+                      .filter(pl.col('Date').cast(pl.Date) == date)
+                      .select('sum')
+                      .sum()
+                      .fill_null(0)
+                      .to_numpy()[0, 0])
+        delta_today = buys_today + sells_today + divs_today
+
+        port_morning = get_port_for_date(etfs, date, buys, sells)
+        value_morning = get_portfolio_value(port_morning, prices, date)
+        port_evening = get_port_for_date(etfs, date + timedelta(days=1), buys, sells)
+        value_evening = get_portfolio_value(port_evening, prices, date + timedelta(days=1))
+
+        if value_prev is None:
+            value_prev = value_morning
+
+        if delta_today == 0:
+            continue
+
+        return_prev = value_morning / value_prev
+        return_today = (value_evening - delta_today) / value_morning
+        return_total *= return_prev * return_today
+
+        value_prev = value_evening
+
+    return return_total
