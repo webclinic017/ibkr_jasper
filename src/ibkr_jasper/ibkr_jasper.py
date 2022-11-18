@@ -55,7 +55,7 @@ with Timer('Output total portfolio table', True):
                              [f'{deals_value:.2f}'] +
                              [f'{divs:.2f}'] +
                              [f'{end_value:.2f}'] +
-                             [f'{ret:.2f}'])
+                             [f'{100 * ret:.2f}%'])
         if start_date.month == 12:
             report_table.add_row([''] * len(report_table.field_names))
 

@@ -131,7 +131,7 @@ def get_period_return(start_date, end_date, etfs, buys, sells, divs, prices):
                        .to_numpy()[0, 0])
         divs_today = (divs
                       .filter(pl.col('Date').cast(pl.Date) == date)
-                      .select('sum')
+                      .select('Amount')
                       .sum()
                       .fill_null(0)
                       .to_numpy()[0, 0])
@@ -148,10 +148,10 @@ def get_period_return(start_date, end_date, etfs, buys, sells, divs, prices):
         if delta_today == 0:
             continue
 
-        return_prev = value_morning / value_prev
+        return_prev = value_morning / value_prev if value_prev > 0 else 1
         return_today = (value_evening - delta_today) / value_morning
         return_total *= return_prev * return_today
 
         value_prev = value_evening
 
-    return return_total
+    return return_total - 1
