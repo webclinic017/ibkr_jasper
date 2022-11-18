@@ -29,7 +29,10 @@ def get_all_etfs(trades):
 
 
 def get_portfolio_start_date(trades):
-    start = trades.select('Date/Time').sort(by=['Date/Time'])[0].to_dicts()[0]['Date/Time']
+    start = (trades
+             .select(pl.col('Date/Time').min())
+             .with_column(pl.col('Date/Time').cast(pl.Date))
+             .to_struct('')[0]['Date/Time'])
     return start
 
 
