@@ -31,6 +31,7 @@ with Timer('Output total portfolio table', True):
     all_report_dates = list(rrule.rrule(rrule.MONTHLY, dtstart=first_report_date, until=start_date.today()))
 
     report_table = PrettyTable()
+    report_table.align = 'r'
     report_table.field_names = [''] + all_etfs + ['start', 'deals', 'divs', 'end', 'return']
     for start_date in all_report_dates:
         # start portfolio value
@@ -59,9 +60,4 @@ with Timer('Output total portfolio table', True):
         if start_date.month == 12:
             report_table.add_row([''] * len(report_table.field_names))
 
-    report_table.align['start'] = 'r'
-    report_table.align['deals'] = 'r'
-    report_table.align['divs'] = 'r'
-    report_table.align['end'] = 'r'
-    report_table.align['return'] = 'r'
     print(report_table)

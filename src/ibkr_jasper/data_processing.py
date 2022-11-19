@@ -42,8 +42,18 @@ def get_port_for_date(portfolio, date, buys, sells):
     sells_asof = sells.filter(pl.col('Date/Time') < date)
     port_asof = {n: [0] for n in portfolio}
     for etf in portfolio:
-        long = buys_asof.filter(pl.col('Symbol') == etf).select('Quantity').sum().fill_null(0).to_numpy()[0, 0]
-        short = sells_asof.filter(pl.col('Symbol') == etf).select('Quantity').sum().fill_null(0).to_numpy()[0, 0]
+        long = (buys_asof
+                .filter(pl.col('Symbol') == etf)
+                .select('Quantity')
+                .sum()
+                .fill_null(0)
+                .to_numpy()[0, 0])
+        short = (sells_asof
+                 .filter(pl.col('Symbol') == etf)
+                 .select('Quantity')
+                 .sum()
+                 .fill_null(0)
+                 .to_numpy()[0, 0])
         port_asof[etf] = long + short
 
     return port_asof
@@ -135,7 +145,7 @@ def get_period_return(start_date, end_date, etfs, buys, sells, divs, prices):
                       .sum()
                       .fill_null(0)
                       .to_numpy()[0, 0])
-        delta_today = buys_today + sells_today + divs_today
+        delta_today = buys_today + sells_today - divs_today
 
         port_morning = get_port_for_date(etfs, date, buys, sells)
         value_morning = get_portfolio_value(port_morning, prices, date)
@@ -145,11 +155,8 @@ def get_period_return(start_date, end_date, etfs, buys, sells, divs, prices):
         if value_prev is None:
             value_prev = value_morning
 
-        if delta_today == 0:
-            continue
-
         return_prev = value_morning / value_prev if value_prev > 0 else 1
-        return_today = (value_evening - delta_today) / value_morning
+        return_today = (value_evening - delta_today) / value_morning if value_morning > 0 else 1
         return_total *= return_prev * return_today
 
         value_prev = value_evening
