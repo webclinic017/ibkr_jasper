@@ -2,7 +2,7 @@ from src.ibkr_jasper.classes.portfolio import Portfolio
 from src.ibkr_jasper.data_processing import get_all_etfs, get_portfolio_start_date
 from src.ibkr_jasper.input import load_raw_reports, fetch_io, fetch_divs, fetch_trades
 from src.ibkr_jasper.output import print_report
-from src.ibkr_jasper.prices_loader import load_etf_prices
+from src.ibkr_jasper.prices_loader import load_prices_and_splits
 from src.ibkr_jasper.timer import Timer
 
 
@@ -21,7 +21,7 @@ with Timer('Parse trades', True):
     earliest_start_date = get_portfolio_start_date(trades_total)
 
 with Timer('Loading of ETF prices', True):
-    all_prices = load_etf_prices(tickers_total, earliest_start_date)
+    all_prices, all_splits = load_prices_and_splits(tickers_total, earliest_start_date)
 
 with Timer('Output total portfolio table', True):
     port = Portfolio('LRP')
