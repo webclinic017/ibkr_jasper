@@ -8,7 +8,7 @@ from pandas._libs.tslibs.offsets import BDay
 from src.ibkr_jasper.timer import Timer
 
 PRICES_PICKLE_PATH = Path('../../data') / 'prices.pickle'
-SPLITS_PICKLE_PATH = Path('../../data') / 'prices.pickle'
+SPLITS_PICKLE_PATH = Path('../../data') / 'splits.pickle'
 
 
 def load_prices_and_splits(all_etfs, start_date):
@@ -19,6 +19,8 @@ def load_prices_and_splits(all_etfs, start_date):
     try:
         with open(PRICES_PICKLE_PATH, 'rb') as handle:
             prices = pickle.load(handle)
+        with open(SPLITS_PICKLE_PATH, 'rb') as handle:
+            splits = pickle.load(handle)
 
         saved_min_date = (prices
                           .select(pl.col('Date').min())
@@ -31,17 +33,17 @@ def load_prices_and_splits(all_etfs, start_date):
         if (set(saved_etfs) == set(all_etfs) and
                 saved_min_date == first_business_day and
                 saved_max_date == last_business_day):
-            return prices
+            return prices, splits
         else:
             print('Cache file with prices misses some values')
     except FileNotFoundError:
         print('Cache file with prices does not exist')
 
     with Timer('Full reload of prices from yahoo', True):
-        prices = yf.download(all_etfs, start=first_business_day, end=last_business_day + BDay(1), actions=True)
-        prices = (pl.from_pandas(prices['Close'].reset_index())
+        data = yf.download(all_etfs, start=first_business_day, end=last_business_day + BDay(1), actions=True)
+        prices = (pl.from_pandas(data['Close'].reset_index())
                     .with_column(pl.col('Date').cast(pl.Date)))
-        splits = (pl.from_pandas(prices['Stock Splits'].reset_index())
+        splits = (pl.from_pandas(data['Stock Splits'].reset_index())
                     .with_column(pl.col('Date').cast(pl.Date)))
 
     with open(PRICES_PICKLE_PATH, 'wb') as handle:
