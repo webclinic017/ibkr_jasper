@@ -61,7 +61,8 @@ def load_prices_and_splits(all_tickers, start_date):
         for ticker in all_tickers:
             cur_splits = (splits
                           .filter(pl.col('ticker') == ticker)
-                          .with_column(pl.col('splits').cumprod(reverse=True).alias('coef'))
+                          .with_columns([pl.col('ticker').cast(pl.Categorical),
+                                         pl.col('splits').cumprod(reverse=True).alias('coef')])
                           .drop('splits'))
             splits_list.append(cur_splits)
 

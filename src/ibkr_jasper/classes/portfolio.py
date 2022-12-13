@@ -41,7 +41,7 @@ class Portfolio:
 
     def load_prices(self, all_prices):
         # TODO add filtering by dates
-        self.prices = all_prices.select(['Date'] + self.tickers)
+        self.prices = all_prices.select(['date'] + self.tickers)
 
     def get_start_date(self):
         if self.start_date is None:
@@ -78,7 +78,7 @@ class Portfolio:
                 continue
 
             price = (self.prices
-                     .filter(pl.col('Date') < date_asof)
+                     .filter(pl.col('date') < date_asof)
                      .select(pl.col(etf))
                      .reverse()
                      .limit(1)

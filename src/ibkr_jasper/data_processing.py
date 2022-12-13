@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 import numpy as np
 import polars as pl
 
@@ -27,3 +25,21 @@ def get_all_etfs(trades):
 def get_portfolio_start_date(trades):
     start = min(trades['datetime']).date()
     return start
+
+
+def adjust_trades_by_splits(trades, tickers, splits):
+    trades_total_adj = []
+    for ticker in tickers:
+        cur_trades_adj = (trades
+                          .filter(pl.col('ticker') == ticker)
+                          .join_asof(splits
+                                     .filter(pl.col('ticker') == ticker)
+                                     .drop('ticker'),
+                                     on='datetime', strategy='forward')
+                          .with_columns([(pl.col('quantity') * pl.col('coef')).alias('quantity'),
+                                         (pl.col('price') / pl.col('coef')).alias('price')])
+                          .drop('coef'))
+        trades_total_adj.append(cur_trades_adj)
+
+    trades_adj = pl.concat(trades_total_adj)
+    return trades_adj
