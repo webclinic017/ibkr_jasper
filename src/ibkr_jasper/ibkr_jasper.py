@@ -3,7 +3,7 @@ from src.ibkr_jasper.data_processing import get_all_etfs, get_portfolio_start_da
     get_tlh_trades
 from src.ibkr_jasper.input import load_raw_reports, fetch_io, fetch_divs, fetch_trades
 from src.ibkr_jasper.output import print_report
-from src.ibkr_jasper.prices_loader import load_prices_and_splits
+from src.ibkr_jasper.prices_loader import load_prices_and_splits, load_xrub_rates
 from src.ibkr_jasper.timer import Timer
 
 import polars as pl
@@ -26,6 +26,7 @@ with Timer('Parse trades', True):
 
 with Timer('Loading of ETF prices', True):
     all_prices, all_splits = load_prices_and_splits(tickers_total, earliest_start_date)
+    xrub_rates = load_xrub_rates(earliest_start_date)
     trades_total = adjust_trades_by_splits(trades_total, tickers_total, all_splits)
 
 with Timer('Get trades for tax loss harvesting', True):

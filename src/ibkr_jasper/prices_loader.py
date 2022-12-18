@@ -1,4 +1,5 @@
 import pickle
+import pandas as pd
 import polars as pl
 import yfinance as yf
 from pathlib import Path
@@ -9,11 +10,18 @@ from src.ibkr_jasper.timer import Timer
 
 PRICES_PICKLE_PATH = Path('../../data') / 'prices.pickle'
 SPLITS_PICKLE_PATH = Path('../../data') / 'splits.pickle'
+XRUB_PICKLE_PATH = Path('../../data') / 'xrub.pickle'
+
+
+def get_date_range_for_load(start_date):
+    first_business_day = (start_date - BDay(1)).to_pydatetime().date()
+    last_business_day = (date.today() - BDay(1)).to_pydatetime().date()
+
+    return first_business_day, last_business_day
 
 
 def load_prices_and_splits(all_tickers, start_date):
-    first_business_day = (start_date - BDay(1)).to_pydatetime().date()
-    last_business_day = (date.today() - BDay(1)).to_pydatetime().date()
+    first_business_day, last_business_day = get_date_range_for_load(start_date)
 
     # try to load cache data and if something is missing, then reload all prices
     try:
@@ -37,7 +45,7 @@ def load_prices_and_splits(all_tickers, start_date):
         else:
             print('Cache file with prices misses some values')
     except FileNotFoundError:
-        print('Cache file with prices does not exist')
+        print('Cache file with prices or splits does not exist')
 
     with Timer('Full reload of prices from yahoo', True):
         data = yf.download(all_tickers, start=first_business_day, end=last_business_day + BDay(1), actions=True)
@@ -75,3 +83,48 @@ def load_prices_and_splits(all_tickers, start_date):
         pickle.dump(splits, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     return prices, splits
+
+
+def load_xrub_rates(start_date):
+    """
+    Central bank publishes exchange rates for Tuesdays to Saturdays, so some tricks should be applied
+    """
+    first_business_day, last_business_day = get_date_range_for_load(start_date)
+    s = first_business_day.strftime('%d/%m/%Y')
+    e = last_business_day.strftime('%d/%m/%Y')
+
+    # try to load cache data and if something is missing, then reload all rates
+    try:
+        with open(XRUB_PICKLE_PATH, 'rb') as handle:
+            xrub_rates = pickle.load(handle)
+
+        saved_min_date = xrub_rates['date'].min()
+        saved_max_date = xrub_rates['date'].max()
+
+        if (saved_min_date == first_business_day and
+                saved_max_date == last_business_day):
+            return xrub_rates
+        else:
+            print('Cache file with prices misses some values')
+    except FileNotFoundError:
+        print('Cache file with rates does not exist')
+
+    with Timer('Full reload of prices from Central Bank API', True):
+        url = f'https://www.cbr.ru/scripts/XML_dynamic.asp?date_req1={s}&date_req2={e}&VAL_NM_RQ=R01235'
+        xrub_rates = (pl.DataFrame(pd.read_xml(url))
+                      .drop('Nominal')
+                      .rename({'Date': 'date', 'Id': 'curr', 'Value': 'rate'})
+                      .with_columns([pl.col('date').str.strptime(pl.Date, fmt='%d.%m.%Y').cast(pl.Date),
+                                     pl.col('curr').str.replace('R01235', 'USD').cast(pl.Categorical),
+                                     pl.col('rate').str.replace(',', '.').cast(pl.Float32)]))
+        dates_list = [first_business_day + timedelta(days=x) for x in
+                      range((last_business_day - first_business_day).days + 1)]
+        xrub_rates = (pl.DataFrame(dates_list, columns=['date'])
+                      .with_column(pl.col('date').cast(pl.Date))
+                      .join(xrub_rates, on='date', how='left')
+                      .with_columns(pl.col('rate').backward_fill()))
+
+    with open(XRUB_PICKLE_PATH, 'wb') as handle:
+        pickle.dump(xrub_rates, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    return xrub_rates
