@@ -43,3 +43,49 @@ def adjust_trades_by_splits(trades, tickers, splits):
 
     trades_adj = pl.concat(trades_total_adj)
     return trades_adj
+
+
+def get_tlh_trades(trades_total, tickers_total, all_prices):
+    """
+    Tax Loss Harvesting
+    """
+    filtered_trades = []
+    for ticker in tickers_total:
+        cur_price = pl.last(all_prices[ticker])
+        cur_trades = trades_total.filter(pl.col('ticker') == ticker)
+        cur_buys = (cur_trades
+                    .filter(pl.col('quantity') > 0)
+                    .drop(['asset_type', 'code'])
+                    .with_columns([
+                        pl.lit(cur_price).alias('cur_price'),
+                        pl.min([0, cur_price - pl.col('price')]).alias('diff'),  # TODO consider fees here and rub exchange rate
+                    ]))
+        cur_sells_sum = (cur_trades
+                         .filter(pl.col('quantity') < 0)
+                         .drop(['asset_type', 'code'])
+                         ['quantity']
+                         .sum())
+        cur_sells_sum = 0 if cur_sells_sum is None else cur_sells_sum
+        cur_buys_sum = cur_buys['quantity'].sum()
+        if not (cur_sells_sum is None) and (cur_buys_sum + cur_sells_sum == 0):
+            continue
+        if cur_buys['diff'].sum() == 0:
+            continue
+
+        for row in cur_buys.to_dicts():
+            if cur_sells_sum == 0:
+                pass
+            elif cur_sells_sum + row['quantity'] < 0:
+                cur_sells_sum += row['quantity']
+                row['quantity'] = 0
+            else:
+                row['quantity'] += cur_sells_sum
+                cur_sells_sum = 0
+
+            filtered_trades.append(row)
+
+    tlh_trades = (pl.from_dicts(filtered_trades)
+                    .select(cur_buys.columns)
+                    .filter((pl.col('quantity') > 0) & (pl.col('diff') < 0)))
+
+    return tlh_trades
