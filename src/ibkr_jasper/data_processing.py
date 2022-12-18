@@ -45,7 +45,7 @@ def adjust_trades_by_splits(trades, tickers, splits):
     return trades_adj
 
 
-def get_tlh_trades(trades_total, tickers_total, all_prices):
+def get_tlh_trades(trades_total, tickers_total, all_prices, xrub_rates):
     """
     Tax Loss Harvesting
     """
@@ -55,11 +55,18 @@ def get_tlh_trades(trades_total, tickers_total, all_prices):
         cur_trades = trades_total.filter(pl.col('ticker') == ticker)
         cur_buys = (cur_trades
                     .filter(pl.col('quantity') > 0)
-                    .drop(['asset_type', 'code'])
                     .with_columns([
+                        pl.col('datetime').cast(pl.Date).alias('date'),
                         pl.lit(cur_price).alias('cur_price'),
-                        pl.min([0, cur_price - pl.col('price')]).alias('diff'),  # TODO consider fees here and rub exchange rate
-                    ]))
+                        pl.min([0, cur_price - pl.col('price')]).alias('diff'),
+                    ])
+                    .join(xrub_rates, on=['date', 'curr'])
+                    .drop(['datetime', 'asset_type', 'code', 'curr'])
+                    .with_columns([
+                        (pl.col('price') * pl.col('rate')).alias('price_rub'),
+                        (pl.col('cur_price') * pl.col('rate')).alias('cur_price_rub'),
+                    ])
+                    .with_column((pl.col('quantity') * pl.min([0, pl.col('cur_price_rub') - pl.col('price_rub')])).alias('diff_rub')))
         cur_sells_sum = (cur_trades
                          .filter(pl.col('quantity') < 0)
                          .drop(['asset_type', 'code'])
@@ -86,6 +93,7 @@ def get_tlh_trades(trades_total, tickers_total, all_prices):
 
     tlh_trades = (pl.from_dicts(filtered_trades)
                     .select(cur_buys.columns)
-                    .filter((pl.col('quantity') > 0) & (pl.col('diff') < 0)))
+                    .filter((pl.col('quantity') > 0) & (pl.col('diff') < 0))
+                    .sort('diff_rub'))
 
     return tlh_trades

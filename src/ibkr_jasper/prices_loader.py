@@ -112,17 +112,17 @@ def load_xrub_rates(start_date):
     with Timer('Full reload of prices from Central Bank API', True):
         url = f'https://www.cbr.ru/scripts/XML_dynamic.asp?date_req1={s}&date_req2={e}&VAL_NM_RQ=R01235'
         xrub_rates = (pl.DataFrame(pd.read_xml(url))
-                      .drop('Nominal')
-                      .rename({'Date': 'date', 'Id': 'curr', 'Value': 'rate'})
-                      .with_columns([pl.col('date').str.strptime(pl.Date, fmt='%d.%m.%Y').cast(pl.Date),
-                                     pl.col('curr').str.replace('R01235', 'USD').cast(pl.Categorical),
-                                     pl.col('rate').str.replace(',', '.').cast(pl.Float32)]))
+                        .drop('Nominal')
+                        .rename({'Date': 'date', 'Id': 'curr', 'Value': 'rate'})
+                        .with_columns([pl.col('date').str.strptime(pl.Date, fmt='%d.%m.%Y').cast(pl.Date),
+                                       pl.col('curr').str.replace('R01235', 'USD').cast(pl.Categorical),
+                                       pl.col('rate').str.replace(',', '.').cast(pl.Float32)]))
         dates_list = [first_business_day + timedelta(days=x) for x in
                       range((last_business_day - first_business_day).days + 1)]
         xrub_rates = (pl.DataFrame(dates_list, columns=['date'])
-                      .with_column(pl.col('date').cast(pl.Date))
-                      .join(xrub_rates, on='date', how='left')
-                      .with_columns(pl.col('rate').backward_fill()))
+                        .with_column(pl.col('date').cast(pl.Date))
+                        .join(xrub_rates, on='date', how='left')
+                        .with_column(pl.col(['curr', 'rate']).backward_fill()))
 
     with open(XRUB_PICKLE_PATH, 'wb') as handle:
         pickle.dump(xrub_rates, handle, protocol=pickle.HIGHEST_PROTOCOL)

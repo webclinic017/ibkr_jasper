@@ -26,11 +26,11 @@ with Timer('Parse trades', True):
 
 with Timer('Loading of ETF prices', True):
     all_prices, all_splits = load_prices_and_splits(tickers_total, earliest_start_date)
-    xrub_rates = load_xrub_rates(earliest_start_date)
     trades_total = adjust_trades_by_splits(trades_total, tickers_total, all_splits)
 
 with Timer('Get trades for tax loss harvesting', True):
-    tlh_trades = get_tlh_trades(trades_total, tickers_total, all_prices)
+    xrub_rates = load_xrub_rates(earliest_start_date)
+    tlh_trades = get_tlh_trades(trades_total, tickers_total, all_prices, xrub_rates)
 
 with Timer('Output total portfolio table', True):
     port = Portfolio('LRP')
