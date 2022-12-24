@@ -16,4 +16,4 @@ class Timer:
             return None
 
         elapsed_time = (time_ns() - self.start) / 1_000_000
-        print(f'{self.message}: {elapsed_time:.6f}ms')
+        print(f'⏳ {self.message}: {elapsed_time:.6f}ms')
