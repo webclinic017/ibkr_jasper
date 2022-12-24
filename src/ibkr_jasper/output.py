@@ -15,7 +15,7 @@ def print_df(df_pl):
 
 
 def print_report(port):
-    first_report_date = port.get_start_date().replace(day=1)
+    first_report_date = port.inception_date.replace(day=1)
     all_report_dates = list(rrule.rrule(rrule.MONTHLY, dtstart=first_report_date, until=date.today()))
 
     report_table = PrettyTable()

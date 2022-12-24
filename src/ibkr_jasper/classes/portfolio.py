@@ -1,52 +1,56 @@
+import polars as pl
 from datetime import timedelta
 
-import polars as pl
-from pathlib import Path
-
-from src.ibkr_jasper.data_processing import get_etf_buys, get_etf_sells, get_portfolio_start_date
+from src.ibkr_jasper.classes.portfolio_base import PortfolioBase
+from src.ibkr_jasper.timer import Timer
 
 
-class Portfolio:
-    def __init__(self, portfolio_name):
-        self.name = portfolio_name
-        self.trades = None
-        self.buys = None
-        self.sells = None
-        self.divs = None
-        self.start_date = None
-        self.prices = None
+class Portfolio(PortfolioBase):
+    def __init__(self, name='', total_portfolio=None):
+        super().__init__()
+        self.target_weights  = {}
+        self.total_portfolio = total_portfolio
+        self.name            = name
 
-        # load portfolio description
-        portfolios_path = Path('../../portfolios')
-        cur_port_path = portfolios_path / f'{self.name}.portfolio'
+    def load(self):
+        with Timer(f'Load portfolio description for {self.name}', True):
+            self.load_description()
+        with Timer(f'Load trades for {self.name}', True):
+            self.load_trades()
+        with Timer('Split trades on buys & sells', True):
+            self.get_buys_sells()
+        with Timer(f'Load divs for {self.name}', True):
+            self.load_divs()
+        with Timer('Get total portfolio start date', True):
+            self.get_inception_date()
+        with Timer(f'Load prices for {self.name}', True):
+            self.load_prices()
+
+        return self
+
+    def load_description(self):
+        cur_port_path = self.PORTFOLIOS_PATH / f'{self.name}.portfolio'
         with open(cur_port_path) as file:
             lines = [line.rstrip() for line in file]
 
-        # parse portfolio description
-        self.target_weights = {}
         for line in lines:
             split_line = line.split(' ')
             self.target_weights[split_line[0]] = split_line[1]
 
-        # fill other portfolio information
         self.tickers = list(self.target_weights.keys())
 
-    def load_trades(self, all_trades):
-        self.trades = all_trades.filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers))
-        self.buys = get_etf_buys(self.trades)
-        self.sells = get_etf_sells(self.trades)
+    def load_trades(self):
+        self.trades = (self.total_portfolio.trades
+                       .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers)))
 
-    def load_divs(self, all_divs):
-        self.divs = all_divs.filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers))
+    def load_divs(self):
+        self.divs = (self.total_portfolio.divs
+                     .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers)))
 
-    def load_prices(self, all_prices):
-        # TODO add filtering by dates
-        self.prices = all_prices.select(['date'] + self.tickers)
-
-    def get_start_date(self):
-        if self.start_date is None:
-            self.start_date = get_portfolio_start_date(self.trades)
-        return self.start_date
+    def load_prices(self):
+        self.prices = (self.total_portfolio.prices
+                       .filter(pl.col('date') >= self.inception_date)
+                       .select(['date'] + self.tickers))
 
     def get_port_for_date(self, date_asof):
         """Gives portfolio value on previous day close"""
