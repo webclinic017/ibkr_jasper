@@ -4,6 +4,7 @@ import pandas as pd
 import pickle
 import polars as pl
 import yfinance as yf
+from collections import Counter
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from pandas._libs.tslibs.offsets import BDay
@@ -13,18 +14,22 @@ from src.ibkr_jasper.timer import Timer
 
 
 class TotalPortfolio(PortfolioBase):
-    DATA_PATH          = Path('../../data')
-    PRICES_PICKLE_PATH = DATA_PATH / 'prices.pickle'
-    SPLITS_PICKLE_PATH = DATA_PATH / 'splits.pickle'
-    XRUB_PICKLE_PATH   = DATA_PATH / 'xrub.pickle'
+    DATA_PATH             = Path('../../data')
+    PRICES_PICKLE_PATH    = DATA_PATH / 'prices.pickle'
+    SPLITS_PICKLE_PATH    = DATA_PATH / 'splits.pickle'
+    XRUB_PICKLE_PATH      = DATA_PATH / 'xrub.pickle'
+    SHARED_TICKERS_TRADES = PortfolioBase.PORTFOLIOS_PATH / 'shared_tickers.deals'
 
     def __init__(self):
         super().__init__()
-        self.report_list   = []
-        self.io            = None
-        self.splits        = None
-        self.xrub_rates    = None
-        self.tlh_trades    = None
+        self.report_list     = []
+        self.io              = None
+        self.splits          = None
+        self.xrub_rates      = None
+        self.tlh_trades      = None
+        self.shared_trades   = None
+        self.tickers_mapping = {}
+        self.all_portfolios  = {}
 
     def load(self):
         with Timer('Read reports', True):
@@ -36,7 +41,14 @@ class TotalPortfolio(PortfolioBase):
         with Timer('Parse dividends', True):
             self.fetch_divs()
         with Timer('Get all tickers in total portfolio', True):
-            self.get_all_etfs()
+            self.get_all_tickers()
+        with Timer('Load all portfolios', True):
+            self.load_all_portfolios()
+        with Timer('Get shared tickers in total portfolio', True):
+            self.get_shared_tickers()
+        with Timer('Distribute trades', True):
+            self.distribute_trades()
+        # Load virtual trades
         with Timer('Get total portfolio start date', True):
             self.get_inception_date()
         with Timer('Loading of ETF prices and splits', True):
@@ -53,9 +65,7 @@ class TotalPortfolio(PortfolioBase):
         return self
 
     def load_raw_reports(self):
-        all_files = [x for x in self.DATA_PATH.glob('**/*') if x.is_file()]
-        report_files = [x for x in all_files if x.suffix == '.csv']
-
+        report_files = [x for x in self.DATA_PATH.glob('**/*') if x.is_file() and x.suffix == '.csv']
         for report_file in report_files:
             report_reader = csv.reader(open(report_file), delimiter=',')
             self.report_list += list(report_reader)
@@ -138,7 +148,7 @@ class TotalPortfolio(PortfolioBase):
                 continue
             trades_data['datetime'].append(datetime.fromisoformat(row[6].replace(',', '')))
             trades_data['ticker'].append(row[5])
-            trades_data['quantity'].append(float(row[8].replace(',', '.')))
+            trades_data['quantity'].append(float(row[8].replace(',', '')))
             trades_data['price'].append(float(row[9]))
             trades_data['curr'].append(row[4])
             trades_data['fee'].append(float(row[12]) if row[12] != '' else 0.0)
@@ -153,9 +163,124 @@ class TotalPortfolio(PortfolioBase):
                            ])
                        .sort(by=['datetime', 'ticker']))
 
-    def get_all_etfs(self):
-        all_tickers = np.transpose(self.trades.select('ticker').unique().to_numpy()).tolist()[0]
-        self.tickers = [x for x in all_tickers if len(x) <= 4]
+    def get_all_tickers(self):
+        all_tickers = self.trades['ticker'].unique().to_list()
+        self.tickers = [x for x in all_tickers if not '.' in x]
+
+    def load_all_portfolios(self):
+        port_paths = [x for x in self.PORTFOLIOS_PATH.glob('**/*') if x.is_file() and x.suffix == '.portfolio']
+        for cur_port_path in port_paths:
+            port_name = cur_port_path.stem
+            with open(cur_port_path) as file:
+                lines = [line.rstrip() for line in file if not line.startswith('#')]
+
+            target_weights = {}
+            for line in lines:
+                split_line = line.split(' ')
+                if len(split_line) != 2:
+                    continue
+                ticker = split_line[0]
+                weight = float(split_line[1])
+                target_weights[ticker] = weight
+                if not ticker in self.tickers_mapping:
+                    self.tickers_mapping[ticker] = set()
+                self.tickers_mapping[ticker].add(port_name)
+
+            if not target_weights:
+                continue
+            assert sum(target_weights.values()) == 100, 'Sum of targets weights should be 100'
+            self.all_portfolios[port_name] = target_weights
+
+    def get_shared_tickers(self):
+        all_portfolios = [x for x in self.PORTFOLIOS_PATH.glob('**/*') if x.is_file() and x.suffix == '.portfolio']
+        all_tickers = []
+        for cur_port_path in all_portfolios:
+            with open(cur_port_path) as file:
+                lines = [line.rstrip() for line in file if not line.startswith('#')]
+                for line in lines:
+                    all_tickers.append(line.split(' ')[0])
+        self.tickers_shared = [k for k, v in Counter(all_tickers).items() if v > 1]
+        self.tickers_unique = list(set(self.tickers).difference(self.tickers_shared))
+
+    def distribute_trades(self):
+        # load shared trades mapping
+        shared_trades_list = []
+        with open(self.SHARED_TICKERS_TRADES) as file:
+            lines = [line.rstrip() for line in file if not line.startswith('#')]
+            for line in lines:
+                data_list = [x for x in line.split(' ') if x]
+                data_dict = {
+                    'date': datetime.strptime(data_list[0], "%Y.%m.%d").date(),
+                    'ticker': data_list[1],
+                    'quantity': int(data_list[2]),
+                    'portfolio': data_list[3],
+                    'type': data_list[4] if len(data_list) == 5 else 'REAL',
+                }
+                shared_trades_list.append(data_dict)
+        self.shared_trades = pl.from_dicts(shared_trades_list).with_column(pl.col('ticker').cast(pl.Categorical))
+
+        # unique trades
+        trades_unique = (self.trades
+                         .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_unique))
+                         .with_column(pl.col('ticker')
+                                      .cast(pl.Utf8)
+                                      .apply(lambda x: next(iter(self.tickers_mapping[x])))
+                                      .alias('portfolio')))
+
+        # shared trades
+        trades_shared = (self.trades
+                         .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_shared))
+                         .with_column(pl.col('datetime').cast(pl.Date).alias('date')))
+        w = (trades_shared
+             .with_column(pl.col('fee')/pl.col('quantity'))
+             .with_column(pl.col('quantity').apply(lambda x: [np.sign(x)] * abs(int(x))))
+             .explode('quantity')
+             .sort(['datetime', 'ticker', 'price']))
+        q = (self.shared_trades
+             .filter(pl.col('type') == 'REAL')
+             .drop('type')
+             .with_column(pl.col('quantity').cast(pl.Float64).apply(lambda x: [np.sign(x)] * abs(int(x))))
+             .explode('quantity')
+             .sort(['date', 'ticker']))
+
+        wq_anti = w.join(q, on=['date', 'ticker', 'quantity'], how='anti')
+        qw_anti = q.join(q, on=['date', 'ticker', 'quantity'], how='anti')
+        if len(wq_anti):
+            wq_anti = (wq_anti
+                       .drop(['fee', 'asset_type', 'code', 'date'])
+                       .groupby(['datetime', 'ticker', 'price', 'curr'])
+                       .agg(pl.col('quantity').sum())
+                       .sort('datetime'))
+            print('These trades on shared tickers that are not mapped:')
+            self.print_df(wq_anti)
+        if len(qw_anti):
+            qw_anti = (qw_anti
+                       .groupby(['date', 'portfolio', 'ticker'])
+                       .agg(pl.col('quantity').sum())
+                       .sort('date'))
+            print('These are mapped trades on shared tickers that do not exist:')
+            self.print_df(qw_anti)
+
+        assert len(wq_anti) == 0, 'There are trades on shared tickers that are not mapped'
+        assert len(qw_anti) == 0, 'There are mapped trades on shared tickers that do not exist'
+        assert len(w) == len(q)
+
+        w_new = (w
+                 .hstack(q.rename({'date': 'date_r', 'quantity': 'quantity_r', 'ticker': 'ticker_r'}))
+                 .with_column((pl.when((pl.col('date') != pl.col('date_r')) &
+                                       (pl.col('ticker') != pl.col('ticker_r')) &
+                                       (pl.col('quantity') != pl.col('quantity_r')))
+                               .then(pl.lit(1))
+                               .otherwise(pl.lit(0)))
+                              .alias('errors'))
+                 .drop(['date', 'date_r', 'ticker_r', 'quantity_r'])
+                 .groupby(['datetime', 'ticker', 'price', 'curr', 'asset_type', 'code', 'portfolio'])
+                 .agg(pl.col(['quantity', 'fee', 'errors']).sum()))
+        assert w_new['errors'].sum() == 0
+        trades_shared = w_new.drop('errors')
+
+        self.trades = (pl.concat([trades_unique, trades_shared], how='diagonal')
+                       .sort(['datetime', 'ticker', 'portfolio']))
 
     def load_prices_and_splits(self):
         first_business_day, last_business_day = self.get_date_range_for_load(self.inception_date)
@@ -167,12 +292,8 @@ class TotalPortfolio(PortfolioBase):
             with open(self.SPLITS_PICKLE_PATH, 'rb') as handle:
                 self.splits = pickle.load(handle)
 
-            saved_min_date = (self.prices
-                              .select(pl.col('date').min())
-                              .to_struct('')[0]['date'])
-            saved_max_date = (self.prices
-                              .select(pl.col('date').max())
-                              .to_struct('')[0]['date'])
+            saved_min_date = self.prices['date'].min()
+            saved_max_date = self.prices['date'].max()
             saved_etfs = self.prices.columns[1:]
 
             if (set(saved_etfs) == set(self.tickers) and
@@ -215,7 +336,6 @@ class TotalPortfolio(PortfolioBase):
 
         with open(self.PRICES_PICKLE_PATH, 'wb') as handle:
             pickle.dump(self.prices, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
         with open(self.SPLITS_PICKLE_PATH, 'wb') as handle:
             pickle.dump(self.splits, handle, protocol=pickle.HIGHEST_PROTOCOL)
 

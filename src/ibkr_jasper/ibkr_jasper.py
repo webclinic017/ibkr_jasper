@@ -6,5 +6,5 @@ pl.toggle_string_cache(True)
 
 
 total_portfolio = TotalPortfolio().load()
-port = Portfolio('LRP', total_portfolio).load()
+port = Portfolio('MaxReturn', total_portfolio).load()
 port.print_report()

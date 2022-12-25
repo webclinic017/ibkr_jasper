@@ -15,6 +15,8 @@ class PortfolioBase:
         self.buys           = None
         self.sells          = None
         self.tickers        = None
+        self.tickers_shared = None
+        self.tickers_unique = None
         self.prices         = None
         self.divs           = None
         self.inception_date = None
@@ -50,11 +52,121 @@ class PortfolioBase:
             print(df_pd)
 
     def get_inception_date(self):
-        self.inception_date = min(self.trades['datetime']).date()
+        self.inception_date = self.trades['datetime'].min().date()
 
     def get_buys_sells(self):
         self.buys = self.get_etf_buys(self.trades)
         self.sells = self.get_etf_sells(self.trades)
+
+    def get_port_for_date(self, date_asof):
+        """Gives portfolio value on previous day close"""
+        buys_asof = self.buys.filter(pl.col('datetime') < date_asof)
+        sells_asof = self.sells.filter(pl.col('datetime') < date_asof)
+        port_asof = {n: [0] for n in self.tickers}
+        for etf in self.tickers:
+            long = (buys_asof
+                    .filter(pl.col('ticker') == etf)
+                    ['quantity']
+                    .append(pl.Series([0.0]))
+                    .sum())
+            short = (sells_asof
+                    .filter(pl.col('ticker') == etf)
+                    ['quantity']
+                    .append(pl.Series([0.0]))
+                    .sum())
+            port_asof[etf] = long + short
+
+        return port_asof
+
+    def get_portfolio_value(self, port_asof, date_asof):
+        """Gives portfolio value on previous day close prices"""
+        total_value = 0
+        for etf, pos in port_asof.items():
+            if pos == 0:
+                continue
+
+            price = (self.prices
+                     .filter(pl.col('date') < date_asof)
+                     [etf]
+                     .reverse()
+                     .limit(1)
+                     .sum())
+            total_value += pos * price
+
+        return total_value
+
+    def get_cur_month_deals_value(self, start_date):
+        end_date = (start_date + timedelta(days=32)).replace(day=1)
+        deals_cur_month = (self.buys
+                           .select(['datetime', 'quantity', 'price', 'fee'])
+                           .extend(self.sells
+                                   .select(['datetime', 'quantity', 'price', 'fee']))
+                           .filter(pl.col('datetime').is_between(start_date, end_date, include_bounds=(True, False)))
+                           .with_column((pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('value'))
+                           ['value']
+                           .append(pl.Series([0.0]))
+                           .sum())
+
+        return deals_cur_month
+
+    def get_cur_month_divs(self, start_date):
+        end_date = (start_date + timedelta(days=32)).replace(day=1)
+        divs_cur_month = (self.divs
+                          .filter(pl.col('ex-date').is_between(start_date, end_date, include_bounds=(True, False)))
+                          ['div total']
+                          .append(pl.Series([0.0]))
+                          .sum())
+
+        return divs_cur_month
+
+    def get_period_return(self, start_date, end_date):
+        trade_dates = (self.buys
+                       .select('datetime')
+                       .extend(self.sells
+                               .select('datetime'))
+                       .with_column(pl.col('datetime').cast(pl.Date))
+                       .rename({'datetime': 'date'})
+                       .extend(self.divs
+                               .select('ex-date')
+                               .rename({'ex-date': 'date'}))
+                       .filter((start_date <= pl.col('date')) & (pl.col('date') < end_date))  # TODO use between function here
+                       .unique()
+                       .get_column('date')
+                       .to_numpy()
+                       .tolist())
+        trade_dates = sorted(trade_dates + [start_date.date(), end_date.date()])
+
+        return_total = 1
+        value_prev = None
+        for dt in trade_dates:
+            trades_today = (self.trades
+                            .filter(pl.col('datetime').cast(pl.Date) == dt)
+                            .with_column((pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('sum'))
+                            ['sum']
+                            .append(pl.Series([0.0]))
+                            .sum())
+            divs_today = (self.divs
+                          .filter(pl.col('ex-date') == dt)
+                          ['div total']
+                          .append(pl.Series([0.0]))
+                          .sum())
+            delta_today = trades_today - divs_today
+
+            port_morning = self.get_port_for_date(dt)
+            value_morning = self.get_portfolio_value(port_morning, dt)
+            port_evening = self.get_port_for_date(dt + timedelta(days=1))
+            value_evening = self.get_portfolio_value(port_evening, dt + timedelta(days=1))
+
+            if value_prev is None:
+                value_prev = value_morning
+
+            return_prev = value_morning / value_prev if value_prev > 0 else 1
+            return_today = (value_evening - delta_today) / value_morning if value_morning > 0 else 1
+            return_total *= return_prev * return_today
+
+            value_prev = value_evening
+
+        return return_total - 1
 
     def print_report(self):
         first_report_date = self.inception_date.replace(day=1)
