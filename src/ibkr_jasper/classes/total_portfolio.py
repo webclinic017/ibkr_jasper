@@ -46,9 +46,6 @@ class TotalPortfolio(PortfolioBase):
             self.load_all_portfolios()
         with Timer('Get shared tickers in total portfolio', True):
             self.get_shared_tickers()
-        with Timer('Distribute trades', True):
-            self.distribute_trades()
-        # Load virtual trades
         with Timer('Get total portfolio start date', True):
             self.get_inception_date()
         with Timer('Loading of ETF prices and splits', True):
@@ -57,6 +54,8 @@ class TotalPortfolio(PortfolioBase):
             self.load_xrub_rates()
         with Timer('Adjust trades by splits', True):
             self.adjust_trades_by_splits()
+        with Timer('Distribute trades', True):
+            self.distribute_trades()
         with Timer('Split trades on buys & sells', True):
             self.get_buys_sells()
         with Timer('Get trades for tax loss harvesting', True):
@@ -279,7 +278,22 @@ class TotalPortfolio(PortfolioBase):
         assert w_new['errors'].sum() == 0
         trades_shared = w_new.drop('errors')
 
-        self.trades = (pl.concat([trades_unique, trades_shared], how='diagonal')
+        # virtual trades
+        prices_melted = (self.prices
+                         .melt(id_vars='date', variable_name='ticker', value_name='price')
+                         .with_column(pl.col('ticker').cast(pl.Categorical)))
+        trades_virtual = (self.shared_trades
+                          .filter(pl.col('type') == 'VIRTUAL')
+                          .with_columns([pl.col('quantity').cast(pl.Float64),
+                                         pl.col('date').cast(pl.Datetime).alias('datetime'),
+                                         pl.lit('USD').cast(pl.Categorical).alias('curr'),
+                                         pl.lit(0.0).alias('fee'),
+                                         pl.lit('Stocks').cast(pl.Categorical).alias('asset_type'),
+                                         pl.lit('V').alias('code')])
+                          .join(prices_melted, on=['date', 'ticker'], how='left')
+                          .drop(['date', 'type']))
+
+        self.trades = (pl.concat([trades_unique, trades_shared, trades_virtual], how='diagonal')
                        .sort(['datetime', 'ticker', 'portfolio']))
 
     def load_prices_and_splits(self):
