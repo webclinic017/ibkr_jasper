@@ -227,14 +227,13 @@ class TotalPortfolio(PortfolioBase):
                                       .alias('portfolio')))
 
         # shared trades
-        trades_shared = (self.trades
-                         .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_shared))
-                         .with_column(pl.col('datetime').cast(pl.Date).alias('date')))
-        w = (trades_shared
-             .with_column(pl.col('fee')/pl.col('quantity'))
-             .with_column(pl.col('quantity').apply(lambda x: [np.sign(x)] * abs(int(x))))
+        w = (self.trades
+             .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_shared))
+             .with_columns([pl.col('datetime').cast(pl.Date).alias('date'),
+                            pl.col('fee') / pl.col('quantity'),
+                            pl.col('quantity').apply(lambda x: [np.sign(x)] * abs(int(x)))])
              .explode('quantity')
-             .sort(['datetime', 'ticker', 'price']))
+             .sort(['date', 'ticker', 'price']))
         q = (self.shared_trades
              .filter(pl.col('type') == 'REAL')
              .drop('type')
@@ -242,6 +241,7 @@ class TotalPortfolio(PortfolioBase):
              .explode('quantity')
              .sort(['date', 'ticker']))
 
+        # checks
         wq_anti = w.join(q, on=['date', 'ticker', 'quantity'], how='anti')
         qw_anti = q.join(q, on=['date', 'ticker', 'quantity'], how='anti')
         if len(wq_anti):
@@ -259,7 +259,6 @@ class TotalPortfolio(PortfolioBase):
                        .sort('date'))
             print('These are mapped trades on shared tickers that do not exist:')
             self.print_df(qw_anti)
-
         assert len(wq_anti) == 0, 'There are trades on shared tickers that are not mapped'
         assert len(qw_anti) == 0, 'There are mapped trades on shared tickers that do not exist'
         assert len(w) == len(q)
