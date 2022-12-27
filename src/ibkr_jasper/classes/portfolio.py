@@ -1,3 +1,4 @@
+from __future__ import annotations
 import polars as pl
 from src.ibkr_jasper.classes.portfolio_base import PortfolioBase
 from src.ibkr_jasper.timer import Timer
@@ -10,7 +11,7 @@ class Portfolio(PortfolioBase):
         self.total_portfolio = total_portfolio
         self.name            = name
 
-    def load(self):
+    def load(self) -> Portfolio:
         with Timer(f'Load portfolio description for {self.name}', True):
             self.load_description()
         with Timer(f'Load trades for {self.name}', True):
@@ -26,7 +27,7 @@ class Portfolio(PortfolioBase):
 
         return self
 
-    def load_description(self):
+    def load_description(self) -> None:
         cur_port_path = self.PORTFOLIOS_PATH / f'{self.name}.portfolio'
         with open(cur_port_path) as file:
             lines = [line.rstrip() for line in file]
@@ -39,17 +40,17 @@ class Portfolio(PortfolioBase):
         self.tickers_shared = list(set(self.total_portfolio.tickers_shared).intersection(self.tickers))
         self.tickers_unique = list(set(self.tickers).difference(self.tickers_shared))
 
-    def load_trades(self):
+    def load_trades(self) -> None:
         self.trades = (self.total_portfolio.trades
                        .filter(pl.col('portfolio') == self.name)
                        .drop('portfolio'))
 
-    def load_divs(self):
+    def load_divs(self) -> None:
         # TODO this is wrong, need to load divs afterwards from yahoo
         self.divs = (self.total_portfolio.divs
                      .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers)))
 
-    def load_prices(self):
+    def load_prices(self) -> None:
         self.prices = (self.total_portfolio.prices
                        .filter(pl.col('date') >= self.inception_date)
                        .select(['date'] + self.tickers))

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import csv
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ class TotalPortfolio(PortfolioBase):
     XRUB_PICKLE_PATH      = DATA_PATH / 'xrub.pickle'
     SHARED_TICKERS_TRADES = PortfolioBase.PORTFOLIOS_PATH / 'shared_tickers.deals'
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.report_list     = []
         self.io              = None
@@ -31,7 +32,7 @@ class TotalPortfolio(PortfolioBase):
         self.tickers_mapping = {}
         self.all_portfolios  = {}
 
-    def load(self):
+    def load(self) -> TotalPortfolio:
         with Timer('Read reports', True):
             self.load_raw_reports()
         with Timer('Parse deposits & withdrawals', True):
@@ -63,13 +64,13 @@ class TotalPortfolio(PortfolioBase):
 
         return self
 
-    def load_raw_reports(self):
+    def load_raw_reports(self) -> None:
         report_files = [x for x in self.DATA_PATH.glob('**/*') if x.is_file() and x.suffix == '.csv']
         for report_file in report_files:
             report_reader = csv.reader(open(report_file), delimiter=',')
             self.report_list += list(report_reader)
 
-    def fetch_io(self):
+    def fetch_io(self) -> None:
         io_report = [x for x in self.report_list if x[0] == 'Deposits & Withdrawals']
         io_columns = ['date', 'curr', 'amount', 'desc']
         io_currencies = {x[2] for x in io_report if len(x[2]) == 3}
@@ -86,7 +87,7 @@ class TotalPortfolio(PortfolioBase):
                    .unique()
                    .sort(by=io_columns))
 
-    def fetch_divs(self):
+    def fetch_divs(self) -> None:
         # mb simpler to load them from yahoo finance
         # parse small divs table
         # TODO remove this table, because it has much less information
@@ -138,7 +139,7 @@ class TotalPortfolio(PortfolioBase):
                      .select(accruals_columns)
                      .sort(by=['ex-date', 'ticker']))
 
-    def fetch_trades(self):
+    def fetch_trades(self) -> None:
         trades_report = [x for x in self.report_list if x[0] == 'Trades']
         trades_columns = ['datetime', 'ticker', 'quantity', 'price', 'curr', 'fee', 'asset_type', 'code']
         trades_data = {x: [] for x in trades_columns}
@@ -162,11 +163,11 @@ class TotalPortfolio(PortfolioBase):
                            ])
                        .sort(by=['datetime', 'ticker']))
 
-    def get_all_tickers(self):
+    def get_all_tickers(self) -> None:
         all_tickers = self.trades['ticker'].unique().to_list()
         self.tickers = [x for x in all_tickers if not '.' in x]
 
-    def load_all_portfolios(self):
+    def load_all_portfolios(self) -> None:
         port_paths = [x for x in self.PORTFOLIOS_PATH.glob('**/*') if x.is_file() and x.suffix == '.portfolio']
         for cur_port_path in port_paths:
             port_name = cur_port_path.stem
@@ -190,7 +191,7 @@ class TotalPortfolio(PortfolioBase):
             assert sum(target_weights.values()) == 100, 'Sum of targets weights should be 100'
             self.all_portfolios[port_name] = target_weights
 
-    def get_shared_tickers(self):
+    def get_shared_tickers(self) -> None:
         all_portfolios = [x for x in self.PORTFOLIOS_PATH.glob('**/*') if x.is_file() and x.suffix == '.portfolio']
         all_tickers = []
         for cur_port_path in all_portfolios:
@@ -201,7 +202,7 @@ class TotalPortfolio(PortfolioBase):
         self.tickers_shared = [k for k, v in Counter(all_tickers).items() if v > 1]
         self.tickers_unique = list(set(self.tickers).difference(self.tickers_shared))
 
-    def distribute_trades(self):
+    def distribute_trades(self) -> None:
         # load shared trades mapping
         shared_trades_list = []
         with open(self.SHARED_TICKERS_TRADES) as file:
@@ -295,7 +296,7 @@ class TotalPortfolio(PortfolioBase):
         self.trades = (pl.concat([trades_unique, trades_shared, trades_virtual], how='diagonal')
                        .sort(['datetime', 'ticker', 'portfolio']))
 
-    def load_prices_and_splits(self):
+    def load_prices_and_splits(self) -> None:
         first_business_day, last_business_day = self.get_date_range_for_load(self.inception_date)
 
         # try to load cache data and if something is missing, then reload all prices
@@ -352,7 +353,7 @@ class TotalPortfolio(PortfolioBase):
         with open(self.SPLITS_PICKLE_PATH, 'wb') as handle:
             pickle.dump(self.splits, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def load_xrub_rates(self):
+    def load_xrub_rates(self) -> None:
         """
         Central bank publishes exchange rates for Tuesdays to Saturdays, so some tricks should be applied
         """
@@ -394,7 +395,7 @@ class TotalPortfolio(PortfolioBase):
         with open(self.XRUB_PICKLE_PATH, 'wb') as handle:
             pickle.dump(self.xrub_rates, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def adjust_trades_by_splits(self):
+    def adjust_trades_by_splits(self) -> None:
         trades_total_adj = []
         for ticker in self.tickers:
             cur_trades_adj = (self.trades
@@ -410,7 +411,7 @@ class TotalPortfolio(PortfolioBase):
 
         self.trades = pl.concat(trades_total_adj)
 
-    def get_tlh_trades(self):
+    def get_tlh_trades(self) -> None:
         """
         Tax Loss Harvesting
         """

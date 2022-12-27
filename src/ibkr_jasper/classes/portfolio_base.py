@@ -1,7 +1,7 @@
 import dateutil.rrule as rrule
 import pandas as pd
 import polars as pl
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from pandas._libs.tslibs.offsets import BDay
 from pathlib import Path
 from prettytable import PrettyTable
@@ -10,7 +10,7 @@ from prettytable import PrettyTable
 class PortfolioBase:
     PORTFOLIOS_PATH = Path('../../portfolios')
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.trades         = None
         self.buys           = None
         self.sells          = None
@@ -22,27 +22,27 @@ class PortfolioBase:
         self.inception_date = None
 
     @staticmethod
-    def get_etf_buys(trades):
+    def get_etf_buys(trades: pl.DataFrame) -> pl.DataFrame:
         etf_buys = (trades
                     .filter((pl.col('asset_type') == 'Stocks') &
                             (pl.col('quantity') > 0)))
         return etf_buys
 
     @staticmethod
-    def get_etf_sells(trades):
+    def get_etf_sells(trades: pl.DataFrame) -> pl.DataFrame:
         etf_sells = (trades
                      .filter((pl.col('asset_type') == 'Stocks') &
                              (pl.col('quantity') < 0)))
         return etf_sells
 
     @staticmethod
-    def get_date_range_for_load(start_date):
+    def get_date_range_for_load(start_date: date) -> tuple[date, date]:
         first_business_day = (start_date - BDay(1)).to_pydatetime().date()
         last_business_day = (date.today() - BDay(1)).to_pydatetime().date()
         return first_business_day, last_business_day
 
     @staticmethod
-    def print_df(df_pl):
+    def print_df(df_pl: pl.DataFrame) -> None:
         with pd.option_context(
                 'display.max_rows', None,
                 'display.max_columns', None,
@@ -51,14 +51,14 @@ class PortfolioBase:
             df_pd = df_pl.to_pandas()
             print(df_pd)
 
-    def get_inception_date(self):
+    def get_inception_date(self) -> None:
         self.inception_date = self.trades['datetime'].min().date()
 
-    def get_buys_sells(self):
+    def get_buys_sells(self) -> None:
         self.buys = self.get_etf_buys(self.trades)
         self.sells = self.get_etf_sells(self.trades)
 
-    def get_port_for_date(self, date_asof):
+    def get_port_for_date(self, date_asof: datetime) -> dict:
         """Gives portfolio value on previous day close"""
         buys_asof = self.buys.filter(pl.col('datetime') < date_asof)
         sells_asof = self.sells.filter(pl.col('datetime') < date_asof)
@@ -78,7 +78,7 @@ class PortfolioBase:
 
         return port_asof
 
-    def get_portfolio_value(self, port_asof, date_asof):
+    def get_portfolio_value(self, port_asof: dict, date_asof: datetime) -> float:
         """Gives portfolio value on previous day close prices"""
         total_value = 0
         for etf, pos in port_asof.items():
@@ -95,7 +95,7 @@ class PortfolioBase:
 
         return total_value
 
-    def get_cur_month_deals_value(self, start_date):
+    def get_cur_month_deals_value(self, start_date: datetime) -> float:
         end_date = (start_date + timedelta(days=32)).replace(day=1)
         deals_cur_month = (self.buys
                            .select(['datetime', 'quantity', 'price', 'fee'])
@@ -109,7 +109,7 @@ class PortfolioBase:
 
         return deals_cur_month
 
-    def get_cur_month_divs(self, start_date):
+    def get_cur_month_divs(self, start_date: datetime) -> float:
         end_date = (start_date + timedelta(days=32)).replace(day=1)
         divs_cur_month = (self.divs
                           .filter(pl.col('ex-date').is_between(start_date, end_date, include_bounds=(True, False)))
@@ -119,7 +119,7 @@ class PortfolioBase:
 
         return divs_cur_month
 
-    def get_period_return(self, start_date, end_date):
+    def get_period_return(self, start_date: datetime, end_date: datetime) -> float:
         trade_dates = (self.buys
                        .select('datetime')
                        .extend(self.sells
@@ -168,7 +168,7 @@ class PortfolioBase:
 
         return return_total - 1
 
-    def print_report(self):
+    def print_report(self) -> None:
         first_report_date = self.inception_date.replace(day=1)
         all_report_dates = list(rrule.rrule(rrule.MONTHLY, dtstart=first_report_date, until=date.today()))
 
