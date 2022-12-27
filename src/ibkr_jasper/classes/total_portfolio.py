@@ -279,9 +279,6 @@ class TotalPortfolio(PortfolioBase):
         trades_shared = w_new.drop('errors')
 
         # virtual trades
-        prices_melted = (self.prices
-                         .melt(id_vars='date', variable_name='ticker', value_name='price')
-                         .with_column(pl.col('ticker').cast(pl.Categorical)))
         trades_virtual = (self.shared_trades
                           .filter(pl.col('type') == 'VIRTUAL')
                           .with_columns([pl.col('quantity').cast(pl.Float64),
@@ -290,7 +287,7 @@ class TotalPortfolio(PortfolioBase):
                                          pl.lit(0.0).alias('fee'),
                                          pl.lit('Stocks').cast(pl.Categorical).alias('asset_type'),
                                          pl.lit('V').alias('code')])
-                          .join(prices_melted, on=['date', 'ticker'], how='left')
+                          .join(self.prices, on=['date', 'ticker'], how='left')
                           .drop(['date', 'type']))
 
         self.trades = (pl.concat([trades_unique, trades_shared, trades_virtual], how='diagonal')
@@ -322,27 +319,30 @@ class TotalPortfolio(PortfolioBase):
         with Timer('Full reload of prices from yahoo', True):
             data = yf.download(self.tickers, start=first_business_day, end=last_business_day + BDay(1), actions=True)
             self.prices = (pl.from_pandas(data['Close'].reset_index())
-                        .rename({'Date': 'date'})
-                        .with_column(pl.col('date').cast(pl.Date)))
-            today_splits = (pl.DataFrame({'datetime': [date.today() + timedelta(days=1)] * len(self.tickers),
+                           .rename({'Date': 'date'})
+                           .melt(id_vars='date', variable_name='ticker', value_name='price')
+                           .with_columns([pl.col('date').cast(pl.Date),
+                                          pl.col('ticker').cast(pl.Categorical)]))
+            splits_today = (pl.DataFrame({'datetime': [date.today() + timedelta(days=1)] * len(self.tickers),
                                           'ticker': self.tickers,
                                           'splits': [1.0] * len(self.tickers)})
-                            .with_column(pl.col('datetime').cast(pl.Datetime)))
-            self.splits = (pl.from_pandas(data['Stock Splits'].reset_index())
-                        .rename({'Date': 'datetime'})
-                        .melt(id_vars='datetime', variable_name='ticker', value_name='splits')
-                        .filter(pl.col('splits') > 0)
-                        .with_column(pl.col('datetime').cast(pl.Datetime))
-                        .vstack(today_splits))
-            splits_list = []
+                            .with_columns([pl.col('datetime').cast(pl.Datetime),
+                                           pl.col('ticker').cast(pl.Categorical)]))
+            splits_hist = (pl.from_pandas(data['Stock Splits'].reset_index())
+                           .rename({'Date': 'datetime'})
+                           .melt(id_vars='datetime', variable_name='ticker', value_name='splits')
+                           .filter(pl.col('splits') > 0)
+                           .with_columns([pl.col('datetime').cast(pl.Datetime),
+                                          pl.col('ticker').cast(pl.Categorical)])
+                           .vstack(splits_today))
 
             # do not know how to optimize it
             # TODO use partition_by
+            splits_list = []
             for ticker in self.tickers:
-                cur_splits = (self.splits
+                cur_splits = (splits_hist
                               .filter(pl.col('ticker') == ticker)
-                              .with_columns([pl.col('ticker').cast(pl.Categorical),
-                                             pl.col('splits').cumprod(reverse=True).alias('coef')])
+                              .with_column(pl.col('splits').cumprod(reverse=True).alias('coef'))
                               .drop('splits'))
                 splits_list.append(cur_splits)
 
@@ -379,17 +379,17 @@ class TotalPortfolio(PortfolioBase):
 
         with Timer('Full reload of prices from Central Bank API', True):
             url = f'https://www.cbr.ru/scripts/XML_dynamic.asp?date_req1={s}&date_req2={e}&VAL_NM_RQ=R01235'
-            self.xrub_rates = (pl.DataFrame(pd.read_xml(url))
-                                 .drop('Nominal')
-                                 .rename({'Date': 'date', 'Id': 'curr', 'Value': 'rate'})
-                                 .with_columns([pl.col('date').str.strptime(pl.Date, fmt='%d.%m.%Y').cast(pl.Date),
-                                                pl.col('curr').str.replace('R01235', 'USD').cast(pl.Categorical),
-                                                pl.col('rate').str.replace(',', '.').cast(pl.Float32)]))
+            xrub_rates = (pl.DataFrame(pd.read_xml(url))
+                          .drop('Nominal')
+                          .rename({'Date': 'date', 'Id': 'curr', 'Value': 'rate'})
+                          .with_columns([pl.col('date').str.strptime(pl.Date, fmt='%d.%m.%Y').cast(pl.Date),
+                                         pl.col('curr').str.replace('R01235', 'USD').cast(pl.Categorical),
+                                         pl.col('rate').str.replace(',', '.').cast(pl.Float64)]))
             dates_list = [first_business_day + timedelta(days=x) for x in
                           range((last_business_day - first_business_day).days + 1)]
             self.xrub_rates = (pl.DataFrame(dates_list, columns=['date'])
                                  .with_column(pl.col('date').cast(pl.Date))
-                                 .join(self.xrub_rates, on='date', how='left')
+                                 .join(xrub_rates, on='date', how='left')
                                  .with_column(pl.col(['curr', 'rate']).backward_fill()))
 
         with open(self.XRUB_PICKLE_PATH, 'wb') as handle:
@@ -417,7 +417,9 @@ class TotalPortfolio(PortfolioBase):
         """
         filtered_trades = []
         for ticker in self.tickers:
-            cur_price = pl.last(self.prices[ticker])
+            cur_price = pl.last(self.prices.filter(pl.col('ticker') == ticker)['price'])
+            # TODO switch after polars update
+            # cur_price = self.prices.filter(pl.col('ticker') == ticker).select('price').tail(1).item()
             cur_trades = self.trades.filter(pl.col('ticker') == ticker)
             cur_buys = (cur_trades
                         .filter(pl.col('quantity') > 0)

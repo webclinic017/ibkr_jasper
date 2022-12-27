@@ -52,5 +52,5 @@ class Portfolio(PortfolioBase):
 
     def load_prices(self) -> None:
         self.prices = (self.total_portfolio.prices
-                       .filter(pl.col('date') >= self.inception_date)
-                       .select(['date'] + self.tickers))
+                       .filter((pl.col('ticker').is_in(self.tickers)) &
+                               (pl.col('date') >= self.inception_date)))

@@ -81,16 +81,15 @@ class PortfolioBase:
     def get_portfolio_value(self, port_asof: dict, date_asof: datetime) -> float:
         """Gives portfolio value on previous day close prices"""
         total_value = 0
-        for etf, pos in port_asof.items():
+        for ticker, pos in port_asof.items():
             if pos == 0:
                 continue
 
-            price = (self.prices
-                     .filter(pl.col('date') < date_asof)
-                     [etf]
-                     .reverse()
-                     .limit(1)
-                     .sum())
+            price = (pl.last(self.prices
+                             .filter((pl.col('ticker') == ticker) &
+                                     (pl.col('date') < date_asof))
+                             .tail(1)
+                             ['price']))
             total_value += pos * price
 
         return total_value
