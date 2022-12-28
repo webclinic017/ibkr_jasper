@@ -305,7 +305,7 @@ class TotalPortfolio(PortfolioBase):
 
             saved_min_date = self.prices['date'].min()
             saved_max_date = self.prices['date'].max()
-            saved_etfs = self.prices.columns[1:]
+            saved_etfs = self.prices['ticker'].unique().to_list()
 
             if (set(saved_etfs) == set(self.tickers) and
                     saved_min_date == first_business_day and
