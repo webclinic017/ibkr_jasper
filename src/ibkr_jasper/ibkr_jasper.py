@@ -1,10 +1,17 @@
-from src.ibkr_jasper.classes.portfolio import Portfolio
-from src.ibkr_jasper.classes.total_portfolio import TotalPortfolio
-
+import argparse
 import polars as pl
+
+from src.ibkr_jasper.cmd_functions import dispatcher
+
 pl.toggle_string_cache(True)
 
+parser = argparse.ArgumentParser(description='Welcome to IBKR Jasper - the best program for portfolio accounting')
+parser.add_argument('command', type=str, help='type of command to execute')
+parser.add_argument('args', type=str, nargs='*', help='parameters of command')
+args = parser.parse_args()
 
-total_portfolio = TotalPortfolio().load()
-port = Portfolio('MaxReturn', total_portfolio).load()
-port.print_report()
+try:
+    function = dispatcher[args.command]
+    function(*args.args)
+except KeyError:
+    print(f'command "{args.command}" not found')
