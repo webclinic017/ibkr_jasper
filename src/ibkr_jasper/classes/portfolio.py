@@ -12,30 +12,27 @@ class Portfolio(PortfolioBase):
         self.name            = name
 
     def load(self) -> Portfolio:
-        with Timer(f'Load portfolio description for {self.name}', True):
-            self.load_description()
-        with Timer(f'Load trades for {self.name}', True):
+        with Timer(f'Load target weights for {self.name}', self.debug):
+            self.load_target_weights()
+        with Timer(f'Load tickers for {self.name}', self.debug):
+            self.load_tickers()
+        with Timer(f'Load trades for {self.name}', self.debug):
             self.load_trades()
-        with Timer('Split trades on buys & sells', True):
+        with Timer('Split trades on buys & sells', self.debug):
             self.get_buys_sells()
-        with Timer(f'Load divs for {self.name}', True):
+        with Timer(f'Load divs for {self.name}', self.debug):
             self.load_divs()
-        with Timer('Get total portfolio start date', True):
+        with Timer('Get portfolio start date', self.debug):
             self.get_inception_date()
-        with Timer(f'Load prices for {self.name}', True):
+        with Timer(f'Load prices for {self.name}', self.debug):
             self.load_prices()
 
         return self
 
-    def load_description(self) -> None:
-        cur_port_path = self.PORTFOLIOS_PATH / f'{self.name}.portfolio'
-        with open(cur_port_path) as file:
-            lines = [line.rstrip() for line in file]
+    def load_target_weights(self) -> None:
+        self.target_weights = self.total_portfolio.all_portfolios[self.name]
 
-        for line in lines:
-            split_line = line.split(' ')
-            self.target_weights[split_line[0]] = split_line[1]
-
+    def load_tickers(self):
         self.tickers = list(self.target_weights.keys())
         self.tickers_shared = list(set(self.total_portfolio.tickers_shared).intersection(self.tickers))
         self.tickers_unique = list(set(self.tickers).difference(self.tickers_shared))

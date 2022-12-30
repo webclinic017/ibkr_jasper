@@ -20,6 +20,7 @@ class PortfolioBase:
         self.prices         = None
         self.divs           = None
         self.inception_date = None
+        self.debug          = True
 
     @staticmethod
     def get_etf_buys(trades: pl.DataFrame) -> pl.DataFrame:

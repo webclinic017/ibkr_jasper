@@ -33,33 +33,33 @@ class TotalPortfolio(PortfolioBase):
         self.all_portfolios  = {}
 
     def load(self) -> TotalPortfolio:
-        with Timer('Read reports', True):
+        with Timer('Read reports', self.debug):
             self.load_raw_reports()
-        with Timer('Parse deposits & withdrawals', True):
+        with Timer('Parse deposits & withdrawals', self.debug):
             self.fetch_io()
-        with Timer('Parse trades', True):
+        with Timer('Parse trades', self.debug):
             self.fetch_trades()
-        with Timer('Parse dividends', True):
+        with Timer('Parse dividends', self.debug):
             self.fetch_divs()
-        with Timer('Get all tickers in total portfolio', True):
+        with Timer('Get all tickers in total portfolio', self.debug):
             self.get_all_tickers()
-        with Timer('Load all portfolios', True):
+        with Timer('Load all portfolios', self.debug):
             self.load_all_portfolios()
-        with Timer('Get shared tickers in total portfolio', True):
+        with Timer('Get shared tickers in total portfolio', self.debug):
             self.get_shared_tickers()
-        with Timer('Get total portfolio start date', True):
+        with Timer('Get total portfolio start date', self.debug):
             self.get_inception_date()
-        with Timer('Loading of ETF prices and splits', True):
+        with Timer('Loading of ETF prices and splits', self.debug):
             self.load_prices_and_splits()
-        with Timer('Loading of Central bank exchange rates prices', True):
+        with Timer('Loading of Central bank exchange rates prices', self.debug):
             self.load_xrub_rates()
-        with Timer('Adjust trades by splits', True):
+        with Timer('Adjust trades by splits', self.debug):
             self.adjust_trades_by_splits()
-        with Timer('Distribute trades', True):
+        with Timer('Distribute trades', self.debug):
             self.distribute_trades()
-        with Timer('Split trades on buys & sells', True):
+        with Timer('Split trades on buys & sells', self.debug):
             self.get_buys_sells()
-        with Timer('Get trades for tax loss harvesting', True):
+        with Timer('Get trades for tax loss harvesting', self.debug):
             self.get_tlh_trades()
 
         return self
