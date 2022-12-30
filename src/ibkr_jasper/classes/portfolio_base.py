@@ -1,7 +1,7 @@
 import dateutil.rrule as rrule
 import pandas as pd
 import polars as pl
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, time
 from pandas._libs.tslibs.offsets import BDay
 from pathlib import Path
 from prettytable import PrettyTable
@@ -170,7 +170,9 @@ class PortfolioBase:
 
     def print_report(self) -> None:
         first_report_date = self.inception_date.replace(day=1)
+        cur_datetime = datetime.combine(date.today(), time())
         all_report_dates = list(rrule.rrule(rrule.MONTHLY, dtstart=first_report_date, until=date.today()))
+        all_report_dates += [cur_datetime]
 
         report_table = PrettyTable()
         report_table.align = 'r'
@@ -199,7 +201,7 @@ class PortfolioBase:
                                  [f'{divs:.2f}'] +
                                  [f'{end_value:.2f}'] +
                                  [f'{100 * ret:.2f}%'])
-            if cur_report_date.month == 12:
+            if cur_report_date.month == 12 and (cur_datetime.month != 12 or cur_datetime.year != cur_report_date.year):
                 report_table.add_row([''] * len(report_table.field_names))
 
         print(report_table)
