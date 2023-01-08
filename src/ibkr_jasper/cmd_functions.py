@@ -6,6 +6,7 @@ def status(portfolio_name):
     total_portfolio = TotalPortfolio().load()
     port = Portfolio(portfolio_name, total_portfolio).load()
     port.print_report()
+    port.print_weights()
 
 
 def tlh():

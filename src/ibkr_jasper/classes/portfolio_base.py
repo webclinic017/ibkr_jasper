@@ -11,16 +11,17 @@ class PortfolioBase:
     PORTFOLIOS_PATH = Path('../../portfolios')
 
     def __init__(self) -> None:
-        self.trades         = None
-        self.buys           = None
-        self.sells          = None
-        self.tickers        = None
-        self.tickers_shared = None
-        self.tickers_unique = None
-        self.prices         = None
-        self.divs           = None
-        self.inception_date = None
-        self.debug          = True
+        self.trades          = None
+        self.buys            = None
+        self.sells           = None
+        self.tickers         = None
+        self.tickers_shared  = None
+        self.tickers_unique  = None
+        self.prices          = None
+        self.divs            = None
+        self.inception_date  = None
+        self.current_weights = None
+        self.debug           = False
 
     @staticmethod
     def get_etf_buys(trades: pl.DataFrame) -> pl.DataFrame:
@@ -83,17 +84,19 @@ class PortfolioBase:
         """Gives portfolio value on previous day close prices"""
         total_value = 0
         for ticker, pos in port_asof.items():
-            if pos == 0:
-                continue
-
-            price = (pl.last(self.prices
-                             .filter((pl.col('ticker') == ticker) &
-                                     (pl.col('date') < date_asof))
-                             .tail(1)
-                             ['price']))
-            total_value += pos * price
-
+            total_value += self.get_ticker_value(ticker, pos, date_asof)
         return total_value
+
+    def get_ticker_value(self, ticker: str, pos: int, date_asof: datetime) -> float:
+        if pos == 0:
+            return 0
+
+        price = (pl.last(self.prices
+                         .filter((pl.col('ticker') == ticker) &
+                                 (pl.col('date') < date_asof))
+                         .tail(1)
+                         ['price']))
+        return pos * price
 
     def get_cur_month_deals_value(self, start_date: datetime) -> float:
         end_date = (start_date + timedelta(days=32)).replace(day=1)
