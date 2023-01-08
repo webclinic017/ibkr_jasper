@@ -23,14 +23,15 @@ class TotalPortfolio(PortfolioBase):
 
     def __init__(self) -> None:
         super().__init__()
-        self.report_list     = []
-        self.io              = None
-        self.splits          = None
-        self.xrub_rates      = None
-        self.tlh_trades      = None
-        self.shared_trades   = None
-        self.tickers_mapping = {}
-        self.all_portfolios  = {}
+        self.report_list       = []
+        self.io                = None
+        self.splits            = None
+        self.xrub_rates        = None
+        self.tlh_trades        = None
+        self.shared_trades     = None
+        self.tickers_mapping   = {}
+        self.all_portfolios    = {}
+        self.all_target_values = {}
 
     def load(self) -> TotalPortfolio:
         with Timer('Read reports', self.debug):
@@ -181,6 +182,12 @@ class TotalPortfolio(PortfolioBase):
                     continue
                 ticker = split_line[0]
                 weight = float(split_line[1])
+
+                # manage target value of portfolio
+                if ticker == 'target_value':
+                    self.all_target_values[port_name] = weight
+                    continue
+
                 target_weights[ticker] = weight
                 if not ticker in self.tickers_mapping:
                     self.tickers_mapping[ticker] = set()
@@ -188,7 +195,7 @@ class TotalPortfolio(PortfolioBase):
 
             if not target_weights:
                 continue
-            assert sum(target_weights.values()) == 100, 'Sum of targets weights should be 100'
+            assert sum(target_weights.values()) == 100, f'Sum of targets weights should be 100, {port_name} portfolio'
             self.all_portfolios[port_name] = target_weights
 
     def get_shared_tickers(self) -> None:

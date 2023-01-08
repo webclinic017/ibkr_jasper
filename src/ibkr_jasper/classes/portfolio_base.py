@@ -88,15 +88,17 @@ class PortfolioBase:
         return total_value
 
     def get_ticker_value(self, ticker: str, pos: int, date_asof: datetime) -> float:
-        if pos == 0:
-            return 0
+        return 0 if not pos else pos * self.get_ticker_price(ticker, date_asof)
 
-        price = (pl.last(self.prices
-                         .filter((pl.col('ticker') == ticker) &
-                                 (pl.col('date') < date_asof))
-                         .tail(1)
-                         ['price']))
-        return pos * price
+    def get_ticker_price(self, ticker: str, date_asof: datetime) -> float:
+        return (pl.last(self.prices
+                        .filter((pl.col('ticker') == ticker) &
+                                (pl.col('date') < date_asof))
+                        .tail(1)
+                        ['price']))
+
+    def get_ticker_price_last(self, ticker: str) -> float:
+        return self.get_ticker_price(ticker, datetime.today())
 
     def get_cur_month_deals_value(self, start_date: datetime) -> float:
         end_date = (start_date + timedelta(days=32)).replace(day=1)
