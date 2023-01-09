@@ -42,10 +42,10 @@ class TotalPortfolio(PortfolioBase):
             self.fetch_trades()
         with Timer('Parse dividends', self.debug):
             self.fetch_divs()
-        with Timer('Get all tickers in total portfolio', self.debug):
-            self.get_all_tickers()
         with Timer('Load all portfolios', self.debug):
             self.load_all_portfolios()
+        with Timer('Get all tickers in total portfolio', self.debug):
+            self.get_all_tickers()
         with Timer('Get shared tickers in total portfolio', self.debug):
             self.get_shared_tickers()
         with Timer('Get total portfolio start date', self.debug):
@@ -165,8 +165,9 @@ class TotalPortfolio(PortfolioBase):
                        .sort(by=['datetime', 'ticker']))
 
     def get_all_tickers(self) -> None:
-        all_tickers = self.trades['ticker'].unique().to_list()
-        self.tickers = [x for x in all_tickers if not '.' in x]
+        all_trades_tickers = {x for x in self.trades['ticker'].unique().to_list() if not '.' in x}
+        all_port_tickers = set(self.tickers_mapping.keys())
+        self.tickers = list(all_trades_tickers | all_port_tickers)
 
     def load_all_portfolios(self) -> None:
         port_paths = [x for x in self.PORTFOLIOS_PATH.glob('**/*') if x.is_file() and x.suffix == '.portfolio']

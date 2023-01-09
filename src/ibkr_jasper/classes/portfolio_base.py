@@ -94,6 +94,7 @@ class PortfolioBase:
         return (pl.last(self.prices
                         .filter((pl.col('ticker') == ticker) &
                                 (pl.col('date') < date_asof))
+                        .drop_nulls()
                         .tail(1)
                         ['price']))
 
