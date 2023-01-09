@@ -107,7 +107,7 @@ class PortfolioBase:
                            .extend(self.sells
                                    .select(['datetime', 'quantity', 'price', 'fee']))
                            .filter(pl.col('datetime').is_between(start_date, end_date, include_bounds=(True, False)))
-                           .with_column((pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('value'))
+                           .with_columns((pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('value'))
                            ['value']
                            .append(pl.Series([0.0]))
                            .sum())
@@ -129,7 +129,7 @@ class PortfolioBase:
                        .select('datetime')
                        .extend(self.sells
                                .select('datetime'))
-                       .with_column(pl.col('datetime').cast(pl.Date))
+                       .with_columns(pl.col('datetime').cast(pl.Date))
                        .rename({'datetime': 'date'})
                        .extend(self.divs
                                .select('ex-date')
@@ -146,7 +146,7 @@ class PortfolioBase:
         for dt in trade_dates:
             trades_today = (self.trades
                             .filter(pl.col('datetime').cast(pl.Date) == dt)
-                            .with_column((pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('sum'))
+                            .with_columns((pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('sum'))
                             ['sum']
                             .append(pl.Series([0.0]))
                             .sum())
