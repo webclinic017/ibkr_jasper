@@ -2,6 +2,7 @@ from time import time_ns
 
 
 class Timer:
+
     def __init__(self, message: str, do_print_log: bool) -> None:
         self.message = message
         self.do_print_log = do_print_log

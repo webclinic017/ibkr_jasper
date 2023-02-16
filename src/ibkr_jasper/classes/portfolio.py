@@ -8,12 +8,13 @@ from src.ibkr_jasper.timer import Timer
 
 
 class Portfolio(PortfolioBase):
+
     def __init__(self, name='', total_portfolio=None):
         super().__init__()
-        self.target_weights  = None
-        self.target_value    = 0
+        self.target_weights = None
+        self.target_value = 0
         self.total_portfolio = total_portfolio
-        self.name            = name
+        self.name = name
 
     def load(self) -> Portfolio:
         with Timer(f'Load target weights for {self.name}', self.debug):
@@ -45,19 +46,14 @@ class Portfolio(PortfolioBase):
         self.tickers_unique = list(set(self.tickers).difference(self.tickers_shared))
 
     def load_trades(self) -> None:
-        self.trades = (self.total_portfolio.trades
-                       .filter(pl.col('portfolio') == self.name)
-                       .drop('portfolio'))
+        self.trades = (self.total_portfolio.trades.filter(pl.col('portfolio') == self.name).drop('portfolio'))
 
     def load_divs(self) -> None:
         # TODO this is wrong, need to load divs afterwards from yahoo
-        self.divs = (self.total_portfolio.divs
-                     .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers)))
+        self.divs = (self.total_portfolio.divs.filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers)))
 
     def load_prices(self) -> None:
-        self.prices = (self.total_portfolio.prices
-                       .filter((pl.col('ticker').is_in(self.tickers)) &
-                               (pl.col('date') >= self.inception_date)))
+        self.prices = (self.total_portfolio.prices.filter((pl.col('ticker').is_in(self.tickers)) & (pl.col('date') >= self.inception_date)))
 
     def calc_current_weights(self) -> None:
         dt = datetime.today()
@@ -75,8 +71,7 @@ class Portfolio(PortfolioBase):
 
         weights_table = PrettyTable()
         weights_table.align = 'r'
-        weights_table.field_names = ['ticker', 'target', 'fact', 'diff', '',
-                                     'price', 'tgt value', 'cur value', 'lots to buy']
+        weights_table.field_names = ['ticker', 'target', 'fact', 'diff', '', 'price', 'tgt value', 'cur value', 'lots to buy']
         for ticker in self.tickers:
             target_weight = self.target_weights[ticker]
             current_weight = self.current_weights[ticker]

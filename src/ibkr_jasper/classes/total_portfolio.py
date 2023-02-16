@@ -15,22 +15,22 @@ from src.ibkr_jasper.timer import Timer
 
 
 class TotalPortfolio(PortfolioBase):
-    DATA_PATH             = Path('../../data')
-    PRICES_PICKLE_PATH    = DATA_PATH / 'prices.pickle'
-    SPLITS_PICKLE_PATH    = DATA_PATH / 'splits.pickle'
-    XRUB_PICKLE_PATH      = DATA_PATH / 'xrub.pickle'
+    DATA_PATH = Path('../../data')
+    PRICES_PICKLE_PATH = DATA_PATH / 'prices.pickle'
+    SPLITS_PICKLE_PATH = DATA_PATH / 'splits.pickle'
+    XRUB_PICKLE_PATH = DATA_PATH / 'xrub.pickle'
     SHARED_TICKERS_TRADES = PortfolioBase.PORTFOLIOS_PATH / 'shared_tickers.deals'
 
     def __init__(self) -> None:
         super().__init__()
-        self.report_list       = []
-        self.io                = None
-        self.splits            = None
-        self.xrub_rates        = None
-        self.tlh_trades        = None
-        self.shared_trades     = None
-        self.tickers_mapping   = {}
-        self.all_portfolios    = {}
+        self.report_list = []
+        self.io = None
+        self.splits = None
+        self.xrub_rates = None
+        self.tlh_trades = None
+        self.shared_trades = None
+        self.tickers_mapping = {}
+        self.all_portfolios = {}
         self.all_target_values = {}
 
     def load(self) -> TotalPortfolio:
@@ -83,10 +83,7 @@ class TotalPortfolio(PortfolioBase):
             io_data['curr'].append(row[2])
             io_data['amount'].append(float(row[5]))
             io_data['desc'].append(row[4])
-        self.io = (pl.DataFrame(io_data)
-                   .with_columns(pl.col('curr').cast(pl.Categorical))
-                   .unique()
-                   .sort(by=io_columns))
+        self.io = (pl.DataFrame(io_data).with_columns(pl.col('curr').cast(pl.Categorical)).unique().sort(by=io_columns))
 
     def fetch_divs(self) -> None:
         # mb simpler to load them from yahoo finance
@@ -103,16 +100,10 @@ class TotalPortfolio(PortfolioBase):
             divs_data['ticker'].append(row[4].split('(')[0].replace(' ', ''))
             divs_data['div total'].append(float(row[5]))
             divs_data['curr'].append(row[2])
-        divs_df = (pl.DataFrame(divs_data)
-                   .with_columns([
-                        pl.col('ticker').cast(pl.Categorical),
-                        pl.col('curr').cast(pl.Categorical),
-                    ])
-                   .unique()
-                   .sort(by=['pay date', 'ticker'])
-                   .groupby(['pay date', 'ticker', 'curr'], maintain_order=True)
-                   .sum()
-                   .select(divs_columns))
+        divs_df = (pl.DataFrame(divs_data).with_columns([
+            pl.col('ticker').cast(pl.Categorical),
+            pl.col('curr').cast(pl.Categorical),
+        ]).unique().sort(by=['pay date', 'ticker']).groupby(['pay date', 'ticker', 'curr'], maintain_order=True).sum().select(divs_columns))
 
         # parse big divs table
         accruals_report = [x for x in self.report_list if x[0] == 'Change in Dividend Accruals']
@@ -129,16 +120,11 @@ class TotalPortfolio(PortfolioBase):
             accruals_data['div per share'].append(float(row[11]))
             accruals_data['div total'].append(-float(row[12]))
             accruals_data['tax'].append(float(row[9]))
-        self.divs = (pl.DataFrame(accruals_data)
-                     .with_columns([
-                                 pl.col('ticker').cast(pl.Categorical),
-                                 pl.col('curr').cast(pl.Categorical),
-                             ])
-                     .unique()
-                     .groupby(['ex-date', 'ticker', 'quantity', 'div per share', 'curr'], maintain_order=True)
-                     .last()
-                     .select(accruals_columns)
-                     .sort(by=['ex-date', 'ticker']))
+        self.divs = (pl.DataFrame(accruals_data).with_columns([
+            pl.col('ticker').cast(pl.Categorical),
+            pl.col('curr').cast(pl.Categorical),
+        ]).unique().groupby(['ex-date', 'ticker', 'quantity', 'div per share', 'curr'],
+                            maintain_order=True).last().select(accruals_columns).sort(by=['ex-date', 'ticker']))
 
     def fetch_trades(self) -> None:
         trades_report = [x for x in self.report_list if x[0] == 'Trades']
@@ -156,13 +142,11 @@ class TotalPortfolio(PortfolioBase):
             trades_data['asset_type'].append(row[3])
             trades_data['code'].append(row[16])
 
-        self.trades = (pl.DataFrame(trades_data)
-                       .with_columns([
-                               pl.col('ticker').cast(pl.Categorical),
-                               pl.col('curr').cast(pl.Categorical),
-                               pl.col('asset_type').cast(pl.Categorical),
-                           ])
-                       .sort(by=['datetime', 'ticker']))
+        self.trades = (pl.DataFrame(trades_data).with_columns([
+            pl.col('ticker').cast(pl.Categorical),
+            pl.col('curr').cast(pl.Categorical),
+            pl.col('asset_type').cast(pl.Categorical),
+        ]).sort(by=['datetime', 'ticker']))
 
     def get_all_tickers(self) -> None:
         all_trades_tickers = {x for x in self.trades['ticker'].unique().to_list() if not '.' in x}
@@ -228,78 +212,57 @@ class TotalPortfolio(PortfolioBase):
         self.shared_trades = pl.from_dicts(shared_trades_list).with_columns(pl.col('ticker').cast(pl.Categorical))
 
         # unique trades
-        trades_unique = (self.trades
-                         .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_unique))
-                         .with_columns(pl.col('ticker')
-                                       .cast(pl.Utf8)
-                                       .apply(lambda x: next(iter(self.tickers_mapping[x])))
-                                       .alias('portfolio')))
+        trades_unique = (self.trades.filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_unique)).with_columns(
+            pl.col('ticker').cast(pl.Utf8).apply(lambda x: next(iter(self.tickers_mapping[x]))).alias('portfolio')))
 
         # shared trades
-        w = (self.trades
-             .filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_shared))
-             .with_columns([pl.col('datetime').cast(pl.Date).alias('date'),
-                            pl.col('fee') / pl.col('quantity'),
-                            pl.col('quantity').apply(lambda x: [np.sign(x)] * abs(int(x)))])
-             .explode('quantity')
-             .sort(['date', 'ticker', 'price']))
-        q = (self.shared_trades
-             .filter(pl.col('type') == 'REAL')
-             .drop('type')
-             .with_columns(pl.col('quantity').cast(pl.Float64).apply(lambda x: [np.sign(x)] * abs(int(x))))
-             .explode('quantity')
-             .sort(['date', 'ticker']))
+        w = (self.trades.filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_shared)).with_columns([
+            pl.col('datetime').cast(pl.Date).alias('date'),
+            pl.col('fee') / pl.col('quantity'),
+            pl.col('quantity').apply(lambda x: [np.sign(x)] * abs(int(x)))
+        ]).explode('quantity').sort(['date', 'ticker', 'price']))
+        q = (self.shared_trades.filter(pl.col('type') == 'REAL').drop('type').with_columns(
+            pl.col('quantity').cast(pl.Float64).apply(lambda x: [np.sign(x)] * abs(int(x)))).explode('quantity').sort(['date', 'ticker']))
 
         # checks
         wq_anti = w.join(q, on=['date', 'ticker', 'quantity'], how='anti')
         qw_anti = q.join(q, on=['date', 'ticker', 'quantity'], how='anti')
         if len(wq_anti):
-            wq_anti = (wq_anti
-                       .drop(['fee', 'asset_type', 'code', 'date'])
-                       .groupby(['datetime', 'ticker', 'price', 'curr'])
-                       .agg(pl.col('quantity').sum())
-                       .sort('datetime'))
+            wq_anti = (wq_anti.drop(['fee', 'asset_type', 'code', 'date']).groupby(['datetime', 'ticker', 'price',
+                                                                                    'curr']).agg(pl.col('quantity').sum()).sort('datetime'))
             print('These trades on shared tickers that are not mapped:')
             self.print_df(wq_anti)
         if len(qw_anti):
-            qw_anti = (qw_anti
-                       .groupby(['date', 'portfolio', 'ticker'])
-                       .agg(pl.col('quantity').sum())
-                       .sort('date'))
+            qw_anti = (qw_anti.groupby(['date', 'portfolio', 'ticker']).agg(pl.col('quantity').sum()).sort('date'))
             print('These are mapped trades on shared tickers that do not exist:')
             self.print_df(qw_anti)
         assert len(wq_anti) == 0, 'There are trades on shared tickers that are not mapped'
         assert len(qw_anti) == 0, 'There are mapped trades on shared tickers that do not exist'
         assert len(w) == len(q)
 
-        w_new = (w
-                 .hstack(q.rename({'date': 'date_r', 'quantity': 'quantity_r', 'ticker': 'ticker_r'}))
-                 .with_columns((pl.when((pl.col('date') != pl.col('date_r')) &
-                                        (pl.col('ticker') != pl.col('ticker_r')) &
-                                        (pl.col('quantity') != pl.col('quantity_r')))
-                                .then(pl.lit(1))
-                                .otherwise(pl.lit(0)))
-                               .alias('errors'))
-                 .drop(['date', 'date_r', 'ticker_r', 'quantity_r'])
-                 .groupby(['datetime', 'ticker', 'price', 'curr', 'asset_type', 'code', 'portfolio'])
-                 .agg(pl.col(['quantity', 'fee', 'errors']).sum()))
+        w_new = (w.hstack(q.rename({
+            'date': 'date_r',
+            'quantity': 'quantity_r',
+            'ticker': 'ticker_r'
+        })).with_columns(
+            (pl.when((pl.col('date') != pl.col('date_r')) & (pl.col('ticker') != pl.col('ticker_r')) & (pl.col('quantity') != pl.col('quantity_r'))).then(
+                pl.lit(1)).otherwise(pl.lit(0))).alias('errors')).drop(['date', 'date_r', 'ticker_r', 'quantity_r'
+                                                                       ]).groupby(['datetime', 'ticker', 'price', 'curr', 'asset_type', 'code',
+                                                                                   'portfolio']).agg(pl.col(['quantity', 'fee', 'errors']).sum()))
         assert w_new['errors'].sum() == 0
         trades_shared = w_new.drop('errors')
 
         # virtual trades
-        trades_virtual = (self.shared_trades
-                          .filter(pl.col('type') == 'VIRTUAL')
-                          .with_columns([pl.col('quantity').cast(pl.Float64),
-                                         pl.col('date').cast(pl.Datetime).alias('datetime'),
-                                         pl.lit('USD').cast(pl.Categorical).alias('curr'),
-                                         pl.lit(0.0).alias('fee'),
-                                         pl.lit('Stocks').cast(pl.Categorical).alias('asset_type'),
-                                         pl.lit('V').alias('code')])
-                          .join(self.prices, on=['date', 'ticker'], how='left')
-                          .drop(['date', 'type']))
+        trades_virtual = (self.shared_trades.filter(pl.col('type') == 'VIRTUAL').with_columns([
+            pl.col('quantity').cast(pl.Float64),
+            pl.col('date').cast(pl.Datetime).alias('datetime'),
+            pl.lit('USD').cast(pl.Categorical).alias('curr'),
+            pl.lit(0.0).alias('fee'),
+            pl.lit('Stocks').cast(pl.Categorical).alias('asset_type'),
+            pl.lit('V').alias('code')
+        ]).join(self.prices, on=['date', 'ticker'], how='left').drop(['date', 'type']))
 
-        self.trades = (pl.concat([trades_unique, trades_shared, trades_virtual], how='diagonal')
-                       .sort(['datetime', 'ticker', 'portfolio']))
+        self.trades = (pl.concat([trades_unique, trades_shared, trades_virtual], how='diagonal').sort(['datetime', 'ticker', 'portfolio']))
 
     def load_prices_and_splits(self) -> None:
         first_business_day, last_business_day = self.get_date_range_for_load(self.inception_date)
@@ -315,9 +278,7 @@ class TotalPortfolio(PortfolioBase):
             saved_max_date = self.prices['date'].max()
             saved_etfs = self.prices['ticker'].unique().to_list()
 
-            if (set(saved_etfs) == set(self.tickers) and
-                    saved_min_date == first_business_day and
-                    saved_max_date == last_business_day):
+            if (set(saved_etfs) == set(self.tickers) and saved_min_date == first_business_day and saved_max_date == last_business_day):
                 return
             else:
                 print('Cache file with prices misses some values')
@@ -326,32 +287,25 @@ class TotalPortfolio(PortfolioBase):
 
         with Timer('Full reload of prices from yahoo', True):
             data = yf.download(self.tickers, start=first_business_day, end=last_business_day + BDay(1), actions=True)
-            self.prices = (pl.from_pandas(data['Close'].reset_index())
-                           .rename({'Date': 'date'})
-                           .melt(id_vars='date', variable_name='ticker', value_name='price')
-                           .with_columns([pl.col('date').cast(pl.Date),
-                                          pl.col('ticker').cast(pl.Categorical)]))
-            splits_today = (pl.DataFrame({'datetime': [date.today() + timedelta(days=1)] * len(self.tickers),
-                                          'ticker': self.tickers,
-                                          'splits': [1.0] * len(self.tickers)})
-                            .with_columns([pl.col('datetime').cast(pl.Datetime),
-                                           pl.col('ticker').cast(pl.Categorical)]))
-            splits_hist = (pl.from_pandas(data['Stock Splits'].reset_index())
-                           .rename({'Date': 'datetime'})
-                           .melt(id_vars='datetime', variable_name='ticker', value_name='splits')
-                           .filter(pl.col('splits') > 0)
-                           .with_columns([pl.col('datetime').cast(pl.Datetime),
-                                          pl.col('ticker').cast(pl.Categorical)])
-                           .vstack(splits_today))
+            self.prices = (pl.from_pandas(data['Close'].reset_index()).rename({
+                'Date': 'date'
+            }).melt(id_vars='date', variable_name='ticker',
+                    value_name='price').with_columns([pl.col('date').cast(pl.Date), pl.col('ticker').cast(pl.Categorical)]))
+            splits_today = (pl.DataFrame({
+                'datetime': [date.today() + timedelta(days=1)] * len(self.tickers),
+                'ticker': self.tickers,
+                'splits': [1.0] * len(self.tickers)
+            }).with_columns([pl.col('datetime').cast(pl.Datetime), pl.col('ticker').cast(pl.Categorical)]))
+            splits_hist = (pl.from_pandas(data['Stock Splits'].reset_index()).rename({
+                'Date': 'datetime'
+            }).melt(id_vars='datetime', variable_name='ticker', value_name='splits').filter(pl.col('splits') > 0).with_columns(
+                [pl.col('datetime').cast(pl.Datetime), pl.col('ticker').cast(pl.Categorical)]).vstack(splits_today))
 
             # do not know how to optimize it
             # TODO use partition_by
             splits_list = []
             for ticker in self.tickers:
-                cur_splits = (splits_hist
-                              .filter(pl.col('ticker') == ticker)
-                              .with_columns(pl.col('splits').cumprod(reverse=True).alias('coef'))
-                              .drop('splits'))
+                cur_splits = (splits_hist.filter(pl.col('ticker') == ticker).with_columns(pl.col('splits').cumprod(reverse=True).alias('coef')).drop('splits'))
                 splits_list.append(cur_splits)
 
             self.splits = pl.concat(splits_list)
@@ -377,8 +331,7 @@ class TotalPortfolio(PortfolioBase):
             saved_min_date = self.xrub_rates['date'].min()
             saved_max_date = self.xrub_rates['date'].max()
 
-            if (saved_min_date == first_business_day and
-                    saved_max_date == last_business_day):
+            if (saved_min_date == first_business_day and saved_max_date == last_business_day):
                 return self.xrub_rates
             else:
                 print('Cache file with prices misses some values')
@@ -387,18 +340,19 @@ class TotalPortfolio(PortfolioBase):
 
         with Timer('Full reload of prices from Central Bank API', True):
             url = f'https://www.cbr.ru/scripts/XML_dynamic.asp?date_req1={s}&date_req2={e}&VAL_NM_RQ=R01235'
-            xrub_rates = (pl.DataFrame(pd.read_xml(url))
-                          .drop('Nominal')
-                          .rename({'Date': 'date', 'Id': 'curr', 'Value': 'rate'})
-                          .with_columns([pl.col('date').str.strptime(pl.Date, fmt='%d.%m.%Y').cast(pl.Date),
-                                         pl.col('curr').str.replace('R01235', 'USD').cast(pl.Categorical),
-                                         pl.col('rate').str.replace(',', '.').cast(pl.Float64)]))
-            dates_list = [first_business_day + timedelta(days=x) for x in
-                          range((last_business_day - first_business_day).days + 1)]
-            self.xrub_rates = (pl.DataFrame(dates_list, columns=['date'])
-                                 .with_columns(pl.col('date').cast(pl.Date))
-                                 .join(xrub_rates, on='date', how='left')
-                                 .with_columns(pl.col(['curr', 'rate']).backward_fill()))
+            xrub_rates = (pl.DataFrame(pd.read_xml(url)).drop('Nominal').rename({
+                'Date': 'date',
+                'Id': 'curr',
+                'Value': 'rate'
+            }).with_columns([
+                pl.col('date').str.strptime(pl.Date, fmt='%d.%m.%Y').cast(pl.Date),
+                pl.col('curr').str.replace('R01235', 'USD').cast(pl.Categorical),
+                pl.col('rate').str.replace(',', '.').cast(pl.Float64)
+            ]))
+            dates_list = [first_business_day + timedelta(days=x) for x in range((last_business_day - first_business_day).days + 1)]
+            self.xrub_rates = (pl.DataFrame(dates_list,
+                                            columns=['date']).with_columns(pl.col('date').cast(pl.Date)).join(xrub_rates, on='date', how='left').with_columns(
+                                                pl.col(['curr', 'rate']).backward_fill()))
 
         with open(self.XRUB_PICKLE_PATH, 'wb') as handle:
             pickle.dump(self.xrub_rates, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -406,15 +360,12 @@ class TotalPortfolio(PortfolioBase):
     def adjust_trades_by_splits(self) -> None:
         trades_total_adj = []
         for ticker in self.tickers:
-            cur_trades_adj = (self.trades
-                              .filter(pl.col('ticker') == ticker)
-                              .join_asof(self.splits
-                                         .filter(pl.col('ticker') == ticker)
-                                         .drop('ticker'),
-                                         on='datetime', strategy='forward')
-                              .with_columns([(pl.col('quantity') * pl.col('coef')).alias('quantity'),
-                                             (pl.col('price') / pl.col('coef')).alias('price')])
-                              .drop('coef'))
+            cur_trades_adj = (self.trades.filter(pl.col('ticker') == ticker).join_asof(self.splits.filter(pl.col('ticker') == ticker).drop('ticker'),
+                                                                                       on='datetime',
+                                                                                       strategy='forward').with_columns([
+                                                                                           (pl.col('quantity') * pl.col('coef')).alias('quantity'),
+                                                                                           (pl.col('price') / pl.col('coef')).alias('price')
+                                                                                       ]).drop('coef'))
             trades_total_adj.append(cur_trades_adj)
 
         self.trades = pl.concat(trades_total_adj)
@@ -429,25 +380,15 @@ class TotalPortfolio(PortfolioBase):
             # TODO switch after polars update
             # cur_price = self.prices.filter(pl.col('ticker') == ticker).select('price').tail(1).item()
             cur_trades = self.trades.filter(pl.col('ticker') == ticker)
-            cur_buys = (cur_trades
-                        .filter(pl.col('quantity') > 0)
-                        .with_columns([
-                            pl.col('datetime').cast(pl.Date).alias('date'),
-                            pl.lit(cur_price).alias('cur_price'),
-                            pl.min([0, cur_price - pl.col('price')]).alias('diff'),
-                        ])
-                        .join(self.xrub_rates, on=['date', 'curr'])
-                        .drop(['datetime', 'asset_type', 'code', 'curr'])
-                        .with_columns([
-                            (pl.col('price') * pl.col('rate')).alias('price_rub'),
-                            (pl.col('cur_price') * pl.col('rate')).alias('cur_price_rub'),
-                        ])
-                        .with_columns((pl.col('quantity') * pl.min([0, pl.col('cur_price_rub') - pl.col('price_rub')])).alias('diff_rub')))
-            cur_sells_sum = (cur_trades
-                             .filter(pl.col('quantity') < 0)
-                             .drop(['asset_type', 'code'])
-                             ['quantity']
-                             .sum())
+            cur_buys = (cur_trades.filter(pl.col('quantity') > 0).with_columns([
+                pl.col('datetime').cast(pl.Date).alias('date'),
+                pl.lit(cur_price).alias('cur_price'),
+                pl.min([0, cur_price - pl.col('price')]).alias('diff'),
+            ]).join(self.xrub_rates, on=['date', 'curr']).drop(['datetime', 'asset_type', 'code', 'curr']).with_columns([
+                (pl.col('price') * pl.col('rate')).alias('price_rub'),
+                (pl.col('cur_price') * pl.col('rate')).alias('cur_price_rub'),
+            ]).with_columns((pl.col('quantity') * pl.min([0, pl.col('cur_price_rub') - pl.col('price_rub')])).alias('diff_rub')))
+            cur_sells_sum = (cur_trades.filter(pl.col('quantity') < 0).drop(['asset_type', 'code'])['quantity'].sum())
             cur_sells_sum = 0 if cur_sells_sum is None else cur_sells_sum
             cur_buys_sum = cur_buys['quantity'].sum()
             if not (cur_sells_sum is None) and (cur_buys_sum + cur_sells_sum == 0):
@@ -467,7 +408,4 @@ class TotalPortfolio(PortfolioBase):
 
                 filtered_trades.append(row)
 
-        self.tlh_trades = (pl.from_dicts(filtered_trades)
-                             .select(cur_buys.columns)
-                             .filter((pl.col('quantity') > 0) & (pl.col('diff') < 0))
-                             .sort('diff_rub'))
+        self.tlh_trades = (pl.from_dicts(filtered_trades).select(cur_buys.columns).filter((pl.col('quantity') > 0) & (pl.col('diff') < 0)).sort('diff_rub'))
