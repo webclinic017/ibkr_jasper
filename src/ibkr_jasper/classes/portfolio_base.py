@@ -11,30 +11,26 @@ class PortfolioBase:
     PORTFOLIOS_PATH = Path('../../portfolios')
 
     def __init__(self) -> None:
-        self.trades          = None
-        self.buys            = None
-        self.sells           = None
-        self.tickers         = None
-        self.tickers_shared  = None
-        self.tickers_unique  = None
-        self.prices          = None
-        self.divs            = None
-        self.inception_date  = None
+        self.trades = None
+        self.buys = None
+        self.sells = None
+        self.tickers = None
+        self.tickers_shared = None
+        self.tickers_unique = None
+        self.prices = None
+        self.divs = None
+        self.inception_date = None
         self.current_weights = None
-        self.debug           = False
+        self.debug = False
 
     @staticmethod
     def get_etf_buys(trades: pl.DataFrame) -> pl.DataFrame:
-        etf_buys = (trades
-                    .filter((pl.col('asset_type') == 'Stocks') &
-                            (pl.col('quantity') > 0)))
+        etf_buys = (trades.filter((pl.col('asset_type') == 'Stocks') & (pl.col('quantity') > 0)))
         return etf_buys
 
     @staticmethod
     def get_etf_sells(trades: pl.DataFrame) -> pl.DataFrame:
-        etf_sells = (trades
-                     .filter((pl.col('asset_type') == 'Stocks') &
-                             (pl.col('quantity') < 0)))
+        etf_sells = (trades.filter((pl.col('asset_type') == 'Stocks') & (pl.col('quantity') < 0)))
         return etf_sells
 
     @staticmethod
@@ -46,9 +42,12 @@ class PortfolioBase:
     @staticmethod
     def print_df(df_pl: pl.DataFrame) -> None:
         with pd.option_context(
-                'display.max_rows', None,
-                'display.max_columns', None,
-                'display.width', 1000,
+                'display.max_rows',
+                None,
+                'display.max_columns',
+                None,
+                'display.width',
+                1000,
         ):
             df_pd = df_pl.to_pandas()
             print(df_pd)
@@ -66,16 +65,8 @@ class PortfolioBase:
         sells_asof = self.sells.filter(pl.col('datetime') < date_asof)
         port_asof = {n: [0] for n in self.tickers}
         for etf in self.tickers:
-            long = (buys_asof
-                    .filter(pl.col('ticker') == etf)
-                    ['quantity']
-                    .append(pl.Series([0.0]))
-                    .sum())
-            short = (sells_asof
-                    .filter(pl.col('ticker') == etf)
-                    ['quantity']
-                    .append(pl.Series([0.0]))
-                    .sum())
+            long = (buys_asof.filter(pl.col('ticker') == etf)['quantity'].append(pl.Series([0.0])).sum())
+            short = (sells_asof.filter(pl.col('ticker') == etf)['quantity'].append(pl.Series([0.0])).sum())
             port_asof[etf] = long + short
 
         return port_asof
@@ -91,71 +82,41 @@ class PortfolioBase:
         return 0 if not pos else pos * self.get_ticker_price(ticker, date_asof)
 
     def get_ticker_price(self, ticker: str, date_asof: datetime) -> float:
-        return (pl.last(self.prices
-                        .filter((pl.col('ticker') == ticker) &
-                                (pl.col('date') < date_asof))
-                        .drop_nulls()
-                        .tail(1)
-                        ['price']))
+        return (pl.last(self.prices.filter((pl.col('ticker') == ticker) & (pl.col('date') < date_asof)).drop_nulls().tail(1)['price']))
 
     def get_ticker_price_last(self, ticker: str) -> float:
         return self.get_ticker_price(ticker, datetime.today())
 
     def get_cur_month_deals_value(self, start_date: datetime) -> float:
         end_date = (start_date + timedelta(days=32)).replace(day=1)
-        deals_cur_month = (self.buys
-                           .select(['datetime', 'quantity', 'price', 'fee'])
-                           .extend(self.sells
-                                   .select(['datetime', 'quantity', 'price', 'fee']))
-                           .filter(pl.col('datetime').is_between(start_date, end_date, include_bounds=(True, False)))
-                           .with_columns((pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('value'))
-                           ['value']
-                           .append(pl.Series([0.0]))
-                           .sum())
+        deals_cur_month = (self.buys.select(['datetime', 'quantity', 'price', 'fee']).extend(self.sells.select(
+            ['datetime', 'quantity', 'price', 'fee'])).filter(pl.col('datetime').is_between(start_date, end_date, include_bounds=(True, False))).with_columns(
+                (pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('value'))['value'].append(pl.Series([0.0])).sum())
 
         return deals_cur_month
 
     def get_cur_month_divs(self, start_date: datetime) -> float:
         end_date = (start_date + timedelta(days=32)).replace(day=1)
-        divs_cur_month = (self.divs
-                          .filter(pl.col('ex-date').is_between(start_date, end_date, include_bounds=(True, False)))
-                          ['div total']
-                          .append(pl.Series([0.0]))
-                          .sum())
+        divs_cur_month = (self.divs.filter(pl.col('ex-date').is_between(start_date, end_date,
+                                                                        include_bounds=(True, False)))['div total'].append(pl.Series([0.0])).sum())
 
         return divs_cur_month
 
     def get_period_return(self, start_date: datetime, end_date: datetime) -> float:
-        trade_dates = (self.buys
-                       .select('datetime')
-                       .extend(self.sells
-                               .select('datetime'))
-                       .with_columns(pl.col('datetime').cast(pl.Date))
-                       .rename({'datetime': 'date'})
-                       .extend(self.divs
-                               .select('ex-date')
-                               .rename({'ex-date': 'date'}))
-                       .filter((start_date <= pl.col('date')) & (pl.col('date') < end_date))  # TODO use between function here
-                       .unique()
-                       .get_column('date')
-                       .to_numpy()
-                       .tolist())
+        trade_dates = (
+            self.buys.select('datetime').extend(self.sells.select('datetime')).with_columns(pl.col('datetime').cast(pl.Date)).rename({
+                'datetime': 'date'
+            }).extend(self.divs.select('ex-date').rename({'ex-date': 'date'})).filter(
+                (start_date <= pl.col('date')) & (pl.col('date') < end_date))  # TODO use between function here
+            .unique().get_column('date').to_numpy().tolist())
         trade_dates = sorted(trade_dates + [start_date.date(), end_date.date()])
 
         return_total = 1
         value_prev = None
         for dt in trade_dates:
-            trades_today = (self.trades
-                            .filter(pl.col('datetime').cast(pl.Date) == dt)
-                            .with_columns((pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('sum'))
-                            ['sum']
-                            .append(pl.Series([0.0]))
-                            .sum())
-            divs_today = (self.divs
-                          .filter(pl.col('ex-date') == dt)
-                          ['div total']
-                          .append(pl.Series([0.0]))
-                          .sum())
+            trades_today = (self.trades.filter(pl.col('datetime').cast(pl.Date) == dt).with_columns(
+                (pl.col('quantity') * pl.col('price') - pl.col('fee')).alias('sum'))['sum'].append(pl.Series([0.0])).sum())
+            divs_today = (self.divs.filter(pl.col('ex-date') == dt)['div total'].append(pl.Series([0.0])).sum())
             delta_today = trades_today - divs_today
 
             port_morning = self.get_port_for_date(dt)
@@ -200,13 +161,8 @@ class PortfolioBase:
             # return in percents
             ret = self.get_period_return(cur_report_date, cur_end_date)
 
-            report_table.add_row([cur_report_date.date()] +
-                                 [f'{port_start[x]:.0f}' for x in self.tickers] +
-                                 [f'{value_start:.2f}'] +
-                                 [f'{deals_value:.2f}'] +
-                                 [f'{divs:.2f}'] +
-                                 [f'{end_value:.2f}'] +
-                                 [f'{100 * ret:.2f}%'])
+            report_table.add_row([cur_report_date.date()] + [f'{port_start[x]:.0f}' for x in self.tickers] + [f'{value_start:.2f}'] + [f'{deals_value:.2f}'] +
+                                 [f'{divs:.2f}'] + [f'{end_value:.2f}'] + [f'{100 * ret:.2f}%'])
             if cur_report_date.month == 12 and (cur_datetime.month != 12 or cur_datetime.year != cur_report_date.year):
                 report_table.add_row([''] * len(report_table.field_names))
 
