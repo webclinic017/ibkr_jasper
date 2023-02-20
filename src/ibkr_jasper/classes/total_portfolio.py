@@ -1,5 +1,7 @@
 from __future__ import annotations
 import csv
+from typing import Union
+
 import numpy as np
 import pandas as pd
 import pickle
@@ -29,11 +31,13 @@ class TotalPortfolio(PortfolioBase):
         self.xrub_rates = None
         self.tlh_trades = None
         self.shared_trades = None
-        self.tickers_mapping = {}
-        self.all_portfolios = {}
-        self.all_target_values = {}
+        self.tickers_mapping = {}  # for each ticker shows in which portfolios it is present
+        self.all_portfolios = {}  # save target weights for each portfolio
+        self.all_target_values = {}  # save target dollar value of each portfolio
 
     def load(self) -> TotalPortfolio:
+        with Timer('Load all portfolios', self.debug):
+            self.load_all_portfolios()
         with Timer('Read reports', self.debug):
             self.load_raw_reports()
         with Timer('Parse deposits & withdrawals', self.debug):
@@ -42,8 +46,6 @@ class TotalPortfolio(PortfolioBase):
             self.fetch_trades()
         with Timer('Parse dividends', self.debug):
             self.fetch_divs()
-        with Timer('Load all portfolios', self.debug):
-            self.load_all_portfolios()
         with Timer('Get all tickers in total portfolio', self.debug):
             self.get_all_tickers()
         with Timer('Get shared tickers in total portfolio', self.debug):
@@ -149,9 +151,9 @@ class TotalPortfolio(PortfolioBase):
         ]).sort(by=['datetime', 'ticker']))
 
     def get_all_tickers(self) -> None:
+        self.tickers = set(self.tickers_mapping)
         all_trades_tickers = {x for x in self.trades['ticker'].unique().to_list() if not '.' in x}
-        all_port_tickers = set(self.tickers_mapping.keys())
-        self.tickers = list(all_trades_tickers | all_port_tickers)
+        assert all_trades_tickers <= {x.split('.')[0] for x in self.tickers}, 'We have trades that are not in portfolios'
 
     def load_all_portfolios(self) -> None:
         port_paths = [x for x in self.PORTFOLIOS_PATH.glob('**/*') if x.is_file() and x.suffix == '.portfolio']
@@ -191,8 +193,8 @@ class TotalPortfolio(PortfolioBase):
                 lines = [line.rstrip() for line in file if not line.startswith('#')]
                 for line in lines:
                     all_tickers.append(line.split(' ')[0])
-        self.tickers_shared = [k for k, v in Counter(all_tickers).items() if v > 1]
-        self.tickers_unique = list(set(self.tickers).difference(self.tickers_shared))
+        self.tickers_shared = {k for k, v in Counter(all_tickers).items() if v > 1 and k != 'target_value'}
+        self.tickers_unique = set(self.tickers).difference(self.tickers_shared)
 
     def distribute_trades(self) -> None:
         # load shared trades mapping
@@ -212,11 +214,12 @@ class TotalPortfolio(PortfolioBase):
         self.shared_trades = pl.from_dicts(shared_trades_list).with_columns(pl.col('ticker').cast(pl.Categorical))
 
         # unique trades
-        trades_unique = (self.trades.filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_unique)).with_columns(
-            pl.col('ticker').cast(pl.Utf8).apply(lambda x: next(iter(self.tickers_mapping[x]))).alias('portfolio')))
+        tickers_mapping_ibkr = self.ibkr_ticker_from_yahoo(self.tickers_mapping)
+        trades_unique = (self.trades.filter(pl.col('ticker').cast(pl.Utf8).is_in(list(self.ibkr_ticker_from_yahoo(self.tickers_unique)))).with_columns(
+            pl.col('ticker').cast(pl.Utf8).apply(lambda x: next(iter(tickers_mapping_ibkr[x]))).alias('portfolio')))
 
         # shared trades
-        w = (self.trades.filter(pl.col('ticker').cast(pl.Utf8).is_in(self.tickers_shared)).with_columns([
+        w = (self.trades.filter(pl.col('ticker').cast(pl.Utf8).is_in(list(self.ibkr_ticker_from_yahoo(self.tickers_shared)))).with_columns([
             pl.col('datetime').cast(pl.Date).alias('date'),
             pl.col('fee') / pl.col('quantity'),
             pl.col('quantity').apply(lambda x: [np.sign(x)] * abs(int(x)))
@@ -276,9 +279,9 @@ class TotalPortfolio(PortfolioBase):
 
             saved_min_date = self.prices['date'].min()
             saved_max_date = self.prices['date'].max()
-            saved_etfs = self.prices['ticker'].unique().to_list()
+            saved_etfs = set(self.prices['ticker'].unique().to_list())
 
-            if (set(saved_etfs) == set(self.tickers) and saved_min_date == first_business_day and saved_max_date == last_business_day):
+            if (saved_etfs == self.tickers and saved_min_date == first_business_day and saved_max_date == last_business_day):
                 return
             else:
                 print('Cache file with prices misses some values')
@@ -293,7 +296,7 @@ class TotalPortfolio(PortfolioBase):
                     value_name='price').with_columns([pl.col('date').cast(pl.Date), pl.col('ticker').cast(pl.Categorical)]))
             splits_today = (pl.DataFrame({
                 'datetime': [date.today() + timedelta(days=1)] * len(self.tickers),
-                'ticker': self.tickers,
+                'ticker': list(self.tickers),
                 'splits': [1.0] * len(self.tickers)
             }).with_columns([pl.col('datetime').cast(pl.Datetime), pl.col('ticker').cast(pl.Categorical)]))
             splits_hist = (pl.from_pandas(data['Stock Splits'].reset_index()).rename({
@@ -409,3 +412,13 @@ class TotalPortfolio(PortfolioBase):
                 filtered_trades.append(row)
 
         self.tlh_trades = (pl.from_dicts(filtered_trades).select(cur_buys.columns).filter((pl.col('quantity') > 0) & (pl.col('diff') < 0)).sort('diff_rub'))
+
+    def ibkr_ticker_from_yahoo(self, yahoo_tickers: Union[str, set[str]]) -> Union[str, set[str]]:
+        # TODO make static
+        if isinstance(yahoo_tickers, set):
+            return {x.split('.')[0] for x in yahoo_tickers}
+        if isinstance(yahoo_tickers, dict):
+            return {k.split('.')[0]: v for k, v in yahoo_tickers.items()}
+        if isinstance(yahoo_tickers, str):
+            return yahoo_tickers.split('.')[0]
+        raise ValueError('Can not manage this type')
